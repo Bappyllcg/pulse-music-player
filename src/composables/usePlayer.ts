@@ -558,8 +558,13 @@ function usePlayerInternals() {
       // Update custom queue if active
       if (customQueue.value) {
         const idSet = new Set(list.map((t) => t.id))
-        customQueue.value = customQueue.value.filter((t) => idSet.has(t.id))
+        customQueue.value = customQueue.value.filter((t) => t.kind === 'stream' || idSet.has(t.id))
         if (customQueue.value.length === 0) customQueue.value = null
+      }
+
+      // If user is currently playing an online stream track, do not disrupt it
+      if (currentTrack.value?.kind === 'stream') {
+        return
       }
 
       if (list.length === 0) {

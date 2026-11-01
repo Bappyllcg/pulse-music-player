@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Globe,
   Heart,
   ListMusic,
   Maximize2,
@@ -14,6 +15,7 @@ import {
   Pause,
   Play,
   Plus,
+  RefreshCw,
   Repeat,
   Repeat1,
   RotateCcw,
@@ -28,6 +30,7 @@ import {
 import MarqueeText from './components/MarqueeText.vue'
 import WaveformScrubber from './components/WaveformScrubber.vue'
 import { useAudioStorage } from './composables/useAudioStorage'
+import { useOnlineMusic } from './composables/useOnlineMusic'
 import { usePlayer } from './composables/usePlayer'
 import { SLEEP_MINUTE_OPTIONS, useSleepTimer } from './composables/useSleepTimer'
 
@@ -38,8 +41,10 @@ import { SLEEP_MINUTE_OPTIONS, useSleepTimer } from './composables/useSleepTimer
 const storage = useAudioStorage()
 const player = usePlayer()
 const sleep = useSleepTimer()
+const onlineMusic = useOnlineMusic()
 
 const { tracks, localCount, isImporting } = storage
+const { onlineTracks, isLoadingOnline, onlineError, fetchOnlineTracks } = onlineMusic
 const {
   currentTrack,
   isPlaying,
@@ -53,8 +58,15 @@ const {
 /** Active main view: 'library' | 'player' */
 const activeTab = ref<'library' | 'player'>('library')
 
-/** Filter tabs in library: 'all' | 'liked' | 'recent' */
-const selectedFilter = ref<'all' | 'liked' | 'recent'>('all')
+/** Filter tabs in library: 'all' | 'liked' | 'recent' | 'online' */
+const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online'>('all')
+
+async function selectOnlineFilter(): Promise<void> {
+  selectedFilter.value = 'online'
+  if (onlineTracks.value.length === 0) {
+    await fetchOnlineTracks()
+  }
+}
 
 /** Search */
 const showSearch = ref(false)
@@ -98,10 +110,13 @@ let noticeTimer: number | undefined
 const filteredTracks = computed(() => {
   let list = tracks.value
 
-  if (selectedFilter.value === 'liked') {
-    list = list.filter((t) => likedIds.value.has(t.id))
+  if (selectedFilter.value === 'online') {
+    list = onlineTracks.value
+  } else if (selectedFilter.value === 'liked') {
+    const allAvailable = [...tracks.value, ...onlineTracks.value]
+    list = allAvailable.filter((t) => likedIds.value.has(t.id))
   } else if (selectedFilter.value === 'recent') {
-    list = [...list].sort((a, b) => b.createdAt - a.createdAt)
+    list = [...tracks.value].sort((a, b) => b.createdAt - a.createdAt)
   }
 
   if (searchQuery.value.trim()) {
@@ -495,7 +510,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
             :class="
               selectedFilter === 'recent'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
@@ -504,6 +519,19 @@ onBeforeUnmount(() => {
             @click="selectedFilter = 'recent'"
           >
             <span>Recent</span>
+          </button>
+          <button
+            type="button"
+            class="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            :class="
+              selectedFilter === 'online'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+            "
+            @click="selectOnlineFilter"
+          >
+            <Globe :size="13" />
+            <span>Online Music</span>
           </button>
         </div>
 
@@ -557,20 +585,60 @@ onBeforeUnmount(() => {
         <!-- Track List -->
         <section aria-label="Track list">
           <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-lg font-bold text-white">Your library</h2>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-bold text-white">
+                {{ selectedFilter === 'online' ? 'Online Synthwave' : selectedFilter === 'liked' ? 'Liked Songs' : selectedFilter === 'recent' ? 'Recent Tracks' : 'Your library' }}
+              </h2>
+              <button
+                v-if="selectedFilter === 'online'"
+                type="button"
+                class="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition hover:text-white hover:bg-zinc-800"
+                title="Refresh online tracks"
+                @click="fetchOnlineTracks(true)"
+              >
+                <RefreshCw :size="13" :class="{ 'animate-spin': isLoadingOnline }" />
+              </button>
+            </div>
             <span class="text-xs font-medium text-zinc-500">
-              {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? 'song' : 'songs' }}
+              {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
             </span>
           </div>
 
+          <!-- Loading state for online music -->
           <div
-            v-if="filteredTracks.length === 0"
+            v-if="isLoadingOnline && filteredTracks.length === 0"
+            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
+          >
+            <div class="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
+            <p class="text-sm font-medium text-zinc-300">Loading online tracks...</p>
+            <p class="text-xs text-zinc-500">Fetching curated Synthwave from Jamendo</p>
+          </div>
+
+          <!-- Error state for online music -->
+          <div
+            v-else-if="onlineError && filteredTracks.length === 0"
+            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
+          >
+            <Globe :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">{{ onlineError }}</p>
+            <button
+              type="button"
+              class="mt-1 rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-indigo-500"
+              @click="fetchOnlineTracks(true)"
+            >
+              Retry
+            </button>
+          </div>
+
+          <!-- Generic empty state -->
+          <div
+            v-else-if="filteredTracks.length === 0"
             class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
           >
             <Music :size="32" class="text-zinc-600" />
             <p class="text-sm font-medium text-zinc-300">No tracks found</p>
             <p class="text-xs text-zinc-500">
-              {{ searchQuery ? 'Try adjusting your search query.' : 'Import audio files to build your offline library.' }}
+              {{ searchQuery ? 'Try adjusting your search query.' : selectedFilter === 'liked' ? 'No liked tracks yet. Tap the heart on any song to add it!' : 'Import audio files to build your offline library.' }}
             </p>
           </div>
 
@@ -602,12 +670,20 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="min-w-0 flex-1">
-                  <p
-                    class="truncate text-sm font-semibold"
-                    :class="currentTrack?.id === track.id ? 'text-indigo-300' : 'text-zinc-100'"
-                  >
-                    {{ track.title }}
-                  </p>
+                  <div class="flex items-center gap-1.5">
+                    <p
+                      class="truncate text-sm font-semibold"
+                      :class="currentTrack?.id === track.id ? 'text-indigo-300' : 'text-zinc-100'"
+                    >
+                      {{ track.title }}
+                    </p>
+                    <span
+                      v-if="track.kind === 'stream'"
+                      class="shrink-0 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400 ring-1 ring-indigo-500/30"
+                    >
+                      ONLINE
+                    </span>
+                  </div>
                   <p class="truncate text-xs text-zinc-400">{{ track.artist }}</p>
                 </div>
               </div>
