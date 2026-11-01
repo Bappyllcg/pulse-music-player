@@ -5,15 +5,21 @@ import { useAudioStorage } from './useAudioStorage'
 const ALBUM_NAME = 'Pulse Offline Library'
 const SEEK_STEP_SECONDS = 10
 const SETTINGS_KEY = 'pulse-player:settings'
+const STATE_KEY = 'pulse-player:state'
 
 /* ------------------------------------------------------------------ */
-/* Persisted settings                                                  */
+/* Persisted settings & playback state                                 */
 /* ------------------------------------------------------------------ */
 
 interface StoredSettings {
   isShuffle: boolean
   repeatMode: RepeatMode
   volume: number
+}
+
+interface StoredPlaybackState {
+  lastTrackId: string | null
+  lastPosition: number
 }
 
 function loadSettings(): StoredSettings {
@@ -40,7 +46,46 @@ function saveSettings(settings: StoredSettings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
   } catch {
-    /* storage may be unavailable (private mode); settings are best-effort */
+    /* storage may be unavailable (private mode) */
+  }
+}
+
+function loadStoredState(): StoredPlaybackState {
+  const fallback: StoredPlaybackState = { lastTrackId: null, lastPosition: 0 }
+  try {
+    const raw = localStorage.getItem(STATE_KEY)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<StoredPlaybackState>
+    return {
+      lastTrackId: typeof parsed.lastTrackId === 'string' ? parsed.lastTrackId : null,
+      lastPosition:
+        typeof parsed.lastPosition === 'number' && Number.isFinite(parsed.lastPosition) && parsed.lastPosition > 0
+          ? parsed.lastPosition
+          : 0,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+function saveStoredState(state: StoredPlaybackState): void {
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify(state))
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Audio TimeUpdate listeners (Lock screen sleep timer hook)          */
+/* ------------------------------------------------------------------ */
+
+const timeUpdateListeners = new Set<() => void>()
+
+export function onPlayerTimeUpdate(cb: () => void): () => void {
+  timeUpdateListeners.add(cb)
+  return () => {
+    timeUpdateListeners.delete(cb)
   }
 }
 
@@ -48,8 +93,6 @@ function saveSettings(settings: StoredSettings): void {
 /* Singleton audio element + reactive state                            */
 /* ------------------------------------------------------------------ */
 
-// One persistent element for the whole app lifetime. iOS Safari ties background
-// playback to this element, so it must never be recreated or torn down.
 const audio = new Audio()
 audio.preload = 'metadata'
 audio.setAttribute('playsinline', '')
@@ -66,13 +109,12 @@ const isShuffle = ref(settings.isShuffle)
 const repeatMode = ref<RepeatMode>(settings.repeatMode)
 const volume = ref(settings.volume)
 const playbackError = ref<string | null>(null)
+const pendingSeek = ref<number | null>(null)
 
-/** Sleep timer hook: when true, playback stops (rewound) when the current track ends. */
+/** Sleep timer hook: when true, playback stops when the current track ends. */
 const stopAfterCurrent = ref(false)
-/** Incremented each time `stopAfterCurrent` actually halts playback. */
 const stopAfterCurrentFired = ref(0)
 
-/** iOS keeps the hardware volume authoritative: `audio.volume` is read-only there. */
 const volumeSupported = (() => {
   const probe = new Audio()
   probe.volume = 0.5
@@ -88,10 +130,37 @@ function usePlayerInternals() {
   const storage = useAudioStorage()
   const tracks = storage.tracks
 
+  /** Custom active queue (e.g. from active search/liked filter), or null for all tracks */
+  const customQueue = ref<PlayableTrack[] | null>(null)
+
+  const currentQueue = computed<PlayableTrack[]>(() => {
+    if (customQueue.value && customQueue.value.length > 0) {
+      return customQueue.value
+    }
+    return tracks.value
+  })
+
   const currentIndex = computed(() =>
-    tracks.value.findIndex((track) => track.id === currentTrack.value?.id),
+    currentQueue.value.findIndex((track) => track.id === currentTrack.value?.id),
   )
   const hasTracks = computed(() => tracks.value.length > 0)
+
+  let lastPersistAt = 0
+  function persistCurrentState(force = false): void {
+    if (!currentTrack.value) return
+    const now = Date.now()
+    if (!force && now - lastPersistAt < 2500) return
+    lastPersistAt = now
+    saveStoredState({
+      lastTrackId: currentTrack.value.id,
+      lastPosition: currentTime.value,
+    })
+  }
+
+  function setQueue(newList: PlayableTrack[] | null): void {
+    customQueue.value = newList && newList.length > 0 ? [...newList] : null
+    computeStagedNext()
+  }
 
   /* ---------------------------- Media Session --------------------------- */
 
@@ -108,7 +177,7 @@ function usePlayerInternals() {
         position: Math.min(Math.max(audio.currentTime, 0), total),
       })
     } catch {
-      /* Safari throws if the state is momentarily inconsistent; the next tick corrects it */
+      /* Safari throws if momentarily inconsistent */
     }
   }
 
@@ -123,7 +192,7 @@ function usePlayerInternals() {
       artist: track.artist,
       album: ALBUM_NAME,
       artwork: track.coverUrl
-        ? [{ src: track.coverUrl, sizes: '512x512', type: track.coverUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/png' }]
+        ? [{ src: track.coverUrl, sizes: '512x512', type: track.coverUrl.endsWith('.svg') || track.coverUrl.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png' }]
         : [],
     })
   }
@@ -132,9 +201,43 @@ function usePlayerInternals() {
     if (mediaSession) mediaSession.playbackState = state
   }
 
+  /* ------------------------------ Seeking ------------------------------- */
+
+  function applyPendingSeek(): void {
+    if (pendingSeek.value !== null && Number.isFinite(pendingSeek.value)) {
+      const target = pendingSeek.value
+      pendingSeek.value = null
+      try {
+        audio.currentTime = target
+        currentTime.value = target
+      } catch {
+        /* audio not ready yet */
+      }
+    }
+  }
+
+  function seek(seconds: number): void {
+    const total = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : duration.value
+    const target = Math.min(Math.max(seconds, 0), total > 0 ? total : seconds)
+    currentTime.value = target
+    if (audio.readyState >= 1) {
+      audio.currentTime = target
+      pendingSeek.value = null
+    } else {
+      pendingSeek.value = target
+    }
+    updatePositionState()
+    persistCurrentState(true)
+  }
+
+  function seekBy(delta: number): void {
+    seek(currentTime.value + delta)
+  }
+
   /* ------------------------------ Transport ----------------------------- */
 
   async function startPlayback(): Promise<void> {
+    applyPendingSeek()
     try {
       await audio.play()
     } catch (error) {
@@ -149,26 +252,27 @@ function usePlayerInternals() {
   }
 
   /** Points the shared audio element at a track without starting playback. */
-  function loadTrack(track: PlayableTrack): void {
+  function loadTrack(track: PlayableTrack, initialSeek = 0): void {
     currentTrack.value = track
     playbackError.value = null
-    currentTime.value = 0
+    currentTime.value = initialSeek
     duration.value = track.duration
+    pendingSeek.value = initialSeek > 0 ? initialSeek : null
     audio.src = track.src
+    computeStagedNext()
   }
 
-  /**
-   * Swaps the source and calls `play()` in the same synchronous tick (the async
-   * body only yields after `audio.play()` has been invoked). This keeps iOS from
-   * suspending the audio session between tracks while the screen is locked.
-   */
   function playTrack(track: PlayableTrack): Promise<void> {
     loadTrack(track)
     return startPlayback()
   }
 
-  function pickNext(auto: boolean): PlayableTrack | null {
-    const list = tracks.value
+  /* -------------------------- Queue & Shuffle --------------------------- */
+
+  const stagedNextTrack = ref<PlayableTrack | null>(null)
+
+  function pickNextCandidate(auto: boolean): PlayableTrack | null {
+    const list = currentQueue.value
     if (list.length === 0) return null
     const current = currentTrack.value
 
@@ -181,6 +285,7 @@ function usePlayerInternals() {
         if (current) shufflePlayed.add(current.id)
         pool = list.filter((track) => track.id !== current?.id)
       }
+      if (pool.length === 0) return list[0] ?? null
       return pool[Math.floor(Math.random() * pool.length)] ?? null
     }
 
@@ -189,8 +294,43 @@ function usePlayerInternals() {
     return auto && repeatMode.value !== 'all' ? null : list[0]
   }
 
+  function computeStagedNext(): void {
+    stagedNextTrack.value = pickNextCandidate(false)
+  }
+
+  const nextTrackPreview = computed<PlayableTrack | null>(() => {
+    const list = currentQueue.value
+    if (list.length < 2 || !currentTrack.value) return null
+    if (isShuffle.value) {
+      return stagedNextTrack.value ?? pickNextCandidate(false)
+    }
+    const idx = currentIndex.value
+    if (idx < 0 || idx >= list.length - 1) return list[0]
+    return list[idx + 1]
+  })
+
+  const prevTrackPreview = computed<PlayableTrack | null>(() => {
+    const list = currentQueue.value
+    if (list.length < 2 || !currentTrack.value) return null
+    if (isShuffle.value) {
+      if (shuffleHistory.length > 0) {
+        const prevId = shuffleHistory[shuffleHistory.length - 1]
+        const found = list.find((t) => t.id === prevId)
+        if (found) return found
+      }
+    }
+    const idx = currentIndex.value
+    if (idx <= 0) return list[list.length - 1]
+    return list[idx - 1]
+  })
+
   function next(): void {
-    const target = pickNext(false)
+    let target: PlayableTrack | null = null
+    if (isShuffle.value && stagedNextTrack.value && stagedNextTrack.value.id !== currentTrack.value?.id) {
+      target = stagedNextTrack.value
+    } else {
+      target = pickNextCandidate(false)
+    }
     if (!target) return
     if (isShuffle.value && currentTrack.value) shuffleHistory.push(currentTrack.value.id)
     void playTrack(target)
@@ -201,7 +341,7 @@ function usePlayerInternals() {
       seek(0)
       return
     }
-    const list = tracks.value
+    const list = currentQueue.value
     if (list.length === 0) return
 
     if (isShuffle.value) {
@@ -221,7 +361,7 @@ function usePlayerInternals() {
 
   function togglePlay(): void {
     if (!currentTrack.value) {
-      const first = tracks.value[0]
+      const first = currentQueue.value[0] || tracks.value[0]
       if (first) void playTrack(first)
       return
     }
@@ -253,22 +393,11 @@ function usePlayerInternals() {
     void playTrack(track)
   }
 
-  function seek(seconds: number): void {
-    const total = Number.isFinite(audio.duration) ? audio.duration : duration.value
-    const target = Math.min(Math.max(seconds, 0), total > 0 ? total : seconds)
-    audio.currentTime = target
-    currentTime.value = target
-    updatePositionState()
-  }
-
-  function seekBy(delta: number): void {
-    seek(audio.currentTime + delta)
-  }
-
   function toggleShuffle(): void {
     isShuffle.value = !isShuffle.value
     shuffleHistory.length = 0
     shufflePlayed.clear()
+    computeStagedNext()
   }
 
   function cycleRepeat(): void {
@@ -290,6 +419,7 @@ function usePlayerInternals() {
       currentTime.value = 0
       isPlaying.value = false
       setPlaybackState('paused')
+      persistCurrentState(true)
       return
     }
     if (repeatMode.value === 'one') {
@@ -297,18 +427,24 @@ function usePlayerInternals() {
       void startPlayback()
       return
     }
-    const target = pickNext(true)
+    let target: PlayableTrack | null = null
+    if (isShuffle.value && stagedNextTrack.value && stagedNextTrack.value.id !== currentTrack.value?.id) {
+      target = stagedNextTrack.value
+    } else {
+      target = pickNextCandidate(true)
+    }
     if (target) {
       if (isShuffle.value && currentTrack.value) shuffleHistory.push(currentTrack.value.id)
       void playTrack(target)
       return
     }
-    // End of the queue with repeat off: rewind to the first track and stop.
+    // End of the queue with repeat off: rewind and stop.
     isPlaying.value = false
     setPlaybackState('paused')
     shufflePlayed.clear()
-    const first = tracks.value[0]
+    const first = currentQueue.value[0] || tracks.value[0]
     if (first) loadTrack(first)
+    persistCurrentState(true)
   }
 
   function syncDuration(): void {
@@ -329,13 +465,26 @@ function usePlayerInternals() {
     if (audio.ended) return
     isPlaying.value = false
     setPlaybackState('paused')
+    persistCurrentState(true)
   })
   audio.addEventListener('ended', handleEnded)
-  audio.addEventListener('loadedmetadata', syncDuration)
+  audio.addEventListener('loadedmetadata', () => {
+    syncDuration()
+    applyPendingSeek()
+  })
+  audio.addEventListener('canplay', applyPendingSeek)
   audio.addEventListener('durationchange', syncDuration)
   audio.addEventListener('timeupdate', () => {
     currentTime.value = audio.currentTime
     updatePositionState()
+    persistCurrentState()
+    for (const listener of timeUpdateListeners) {
+      try {
+        listener()
+      } catch {
+        /* listener error */
+      }
+    }
   })
   audio.addEventListener('error', () => {
     isPlaying.value = false
@@ -346,13 +495,18 @@ function usePlayerInternals() {
         : 'This track could not be loaded.'
   })
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => persistCurrentState(true))
+    window.addEventListener('beforeunload', () => persistCurrentState(true))
+  }
+
   /* --------------------------- Media Session handlers -------------------- */
 
   function bindAction(action: MediaSessionAction, handler: MediaSessionActionHandler): void {
     try {
       mediaSession?.setActionHandler(action, handler)
     } catch {
-      /* action not supported by this browser */
+      /* action not supported */
     }
   }
 
@@ -368,7 +522,10 @@ function usePlayerInternals() {
 
   /* --------------------------------- Watchers ---------------------------- */
 
-  watch(currentTrack, (track) => updateMetadata(track), { immediate: true, flush: 'sync' })
+  watch(currentTrack, (track) => {
+    updateMetadata(track)
+    computeStagedNext()
+  }, { immediate: true, flush: 'sync' })
 
   watch(
     volume,
@@ -382,14 +539,57 @@ function usePlayerInternals() {
     saveSettings({ isShuffle: isShuffle.value, repeatMode: repeatMode.value, volume: volume.value })
   })
 
-  // Keep the player consistent when the library changes (first load, import, delete).
+  let hasRestoredInitialTrack = false
+  let lastKnownIndex = 0
+
+  watch(currentTrack, (track) => {
+    if (track) {
+      const idx = currentQueue.value.findIndex((t) => t.id === track.id)
+      if (idx !== -1) lastKnownIndex = idx
+    }
+  })
+
+  // Keep player consistent when library changes (cold load, import, delete).
   watch(
     () => tracks.value.map((track) => track.id).join('|'),
     () => {
       const list = tracks.value
+
+      // Update custom queue if active
+      if (customQueue.value) {
+        const idSet = new Set(list.map((t) => t.id))
+        customQueue.value = customQueue.value.filter((t) => idSet.has(t.id))
+        if (customQueue.value.length === 0) customQueue.value = null
+      }
+
+      if (list.length === 0) {
+        currentTrack.value = null
+        audio.removeAttribute('src')
+        audio.load()
+        currentTime.value = 0
+        duration.value = 0
+        activeQueueCleanup()
+        saveStoredState({ lastTrackId: null, lastPosition: 0 })
+        return
+      }
+
+      // Initial cold-start restoration
+      if (!hasRestoredInitialTrack) {
+        hasRestoredInitialTrack = true
+        const saved = loadStoredState()
+        const candidate = saved.lastTrackId ? list.find((t) => t.id === saved.lastTrackId) : null
+        if (candidate) {
+          loadTrack(candidate, saved.lastPosition)
+          return
+        }
+        loadTrack(list[0], 0)
+        return
+      }
+
       const stillPresent = list.some((track) => track.id === currentTrack.value?.id)
       if (stillPresent) return
 
+      // Active track was deleted
       audio.pause()
       isPlaying.value = false
       setPlaybackState('none')
@@ -397,19 +597,23 @@ function usePlayerInternals() {
       for (let i = shuffleHistory.length - 1; i >= 0; i--) {
         if (!ids.has(shuffleHistory[i])) shuffleHistory.splice(i, 1)
       }
-      const first = list[0]
-      if (first) {
-        loadTrack(first)
-      } else {
-        currentTrack.value = null
-        audio.removeAttribute('src')
-        audio.load()
-        currentTime.value = 0
-        duration.value = 0
+
+      // Advance to adjacent track instead of resetting to #0
+      const nextIdx = Math.min(Math.max(0, lastKnownIndex), list.length - 1)
+      const target = list[nextIdx]
+      if (target) {
+        loadTrack(target, 0)
       }
     },
     { immediate: true },
   )
+
+  function activeQueueCleanup(): void {
+    customQueue.value = null
+    stagedNextTrack.value = null
+    shuffleHistory.length = 0
+    shufflePlayed.clear()
+  }
 
   return {
     currentTrack,
@@ -424,12 +628,17 @@ function usePlayerInternals() {
     stopAfterCurrent,
     stopAfterCurrentFired,
     hasTracks,
+    queue: currentQueue,
+    setQueue,
+    nextTrackPreview,
+    prevTrackPreview,
     play,
     pause,
     togglePlay,
     next,
     previous,
     selectTrack,
+    playTrack,
     seek,
     seekBy,
     toggleShuffle,
@@ -441,7 +650,6 @@ function usePlayerInternals() {
 type PlayerApi = ReturnType<typeof usePlayerInternals>
 let api: PlayerApi | null = null
 
-/** Shared player API. Listeners and watchers are created once, in a detached scope. */
 export function usePlayer(): PlayerApi {
   if (!initialized || !api) {
     initialized = true
@@ -449,4 +657,3 @@ export function usePlayer(): PlayerApi {
   }
   return api
 }
-

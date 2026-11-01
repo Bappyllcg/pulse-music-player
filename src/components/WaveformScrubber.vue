@@ -86,19 +86,43 @@ function handlePointerUp(_e: PointerEvent): void {
     emit('seek', targetTime)
   }
 }
+
+function handleKeyStep(delta: number): void {
+  if (props.disabled || props.duration <= 0) return
+  const target = Math.min(props.duration, Math.max(0, props.currentTime + delta))
+  emit('seek', target)
+}
+
+function handleKeySeek(target: number): void {
+  if (props.disabled || props.duration <= 0) return
+  emit('seek', Math.min(props.duration, Math.max(0, target)))
+}
 </script>
 
 <template>
   <div class="w-full select-none py-1">
-    <!-- Waveform Canvas / Bars Area -->
+    <!-- Waveform Canvas / Bars Area with full ARIA Slider semantics -->
     <div
       ref="containerRef"
-      class="relative flex h-14 w-full cursor-pointer items-center justify-between gap-[3px] py-1 touch-none"
+      role="slider"
+      :tabindex="disabled ? -1 : 0"
+      :aria-valuenow="Math.round(displayTime)"
+      aria-valuemin="0"
+      :aria-valuemax="Math.round(duration)"
+      :aria-valuetext="`${formatTime(displayTime)} of ${formatTime(duration)}`"
+      aria-label="Track progress"
+      class="relative flex h-14 w-full cursor-pointer items-center justify-between gap-[3px] py-1 touch-none rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       :class="{ 'opacity-40 pointer-events-none': disabled }"
       @pointerdown="handlePointerDown"
       @pointermove="handlePointerMove"
       @pointerup="handlePointerUp"
       @pointercancel="handlePointerUp"
+      @keydown.left.prevent="handleKeyStep(-5)"
+      @keydown.right.prevent="handleKeyStep(5)"
+      @keydown.page-down.prevent="handleKeyStep(-30)"
+      @keydown.page-up.prevent="handleKeyStep(30)"
+      @keydown.home.prevent="handleKeySeek(0)"
+      @keydown.end.prevent="handleKeySeek(duration)"
     >
       <!-- Background subtle hover bar -->
       <div

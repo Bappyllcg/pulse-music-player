@@ -92,7 +92,7 @@ const notice = ref<string | null>(null)
 let noticeTimer: number | undefined
 
 /* ------------------------------------------------------------------ */
-/* Filtered Tracks                                                    */
+/* Filtered Tracks & Active Queue Synchronization                     */
 /* ------------------------------------------------------------------ */
 
 const filteredTracks = computed(() => {
@@ -120,23 +120,12 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100))
 })
 
-/** Previous and next tracks for the artwork carousel peek in Now Playing */
-const prevTrack = computed(() => {
-  if (!currentTrack.value || tracks.value.length < 2) return null
-  const idx = tracks.value.findIndex((t) => t.id === currentTrack.value?.id)
-  if (idx <= 0) return tracks.value[tracks.value.length - 1]
-  return tracks.value[idx - 1]
-})
-
-const nextTrack = computed(() => {
-  if (!currentTrack.value || tracks.value.length < 2) return null
-  const idx = tracks.value.findIndex((t) => t.id === currentTrack.value?.id)
-  if (idx < 0 || idx >= tracks.value.length - 1) return tracks.value[0]
-  return tracks.value[idx + 1]
-})
+/** Next and previous tracks previewing exact upcoming and historical tracks */
+const prevTrack = player.prevTrackPreview
+const nextTrack = player.nextTrackPreview
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                            */
+/* Helpers & Handlers                                                 */
 /* ------------------------------------------------------------------ */
 
 function formatTrackDuration(seconds: number): string {
@@ -167,10 +156,13 @@ async function onFilesSelected(event: Event): Promise<void> {
     const result = await storage.addFiles(files)
     const parts: string[] = []
     if (result.added > 0) parts.push(`Imported ${result.added} ${result.added === 1 ? 'track' : 'tracks'}`)
+    if (result.duplicates > 0) {
+      parts.push(`Skipped ${result.duplicates} duplicate ${result.duplicates === 1 ? 'song' : 'songs'}`)
+    }
     if (result.skipped.length > 0) {
       parts.push(`Skipped ${result.skipped.length} unsupported ${result.skipped.length === 1 ? 'file' : 'files'}`)
     }
-    showNotice(parts.join(' · '))
+    showNotice(parts.length > 0 ? parts.join(' · ') : 'No files imported')
     if (result.added > 0 && navigator.storage?.persist) {
       void navigator.storage.persist()
     }
@@ -191,8 +183,35 @@ async function removeTrack(id: string, title: string): Promise<void> {
   }
 }
 
+/** Tapping a track row in library opens Now Playing without pausing already-playing tracks */
 function playTrackAndShow(track: typeof tracks.value[0]): void {
+  if (player.currentTrack.value?.id === track.id) {
+    if (!player.isPlaying.value) {
+      player.play()
+    }
+  } else {
+    player.setQueue(filteredTracks.value)
+    player.selectTrack(track)
+  }
+  activeTab.value = 'player'
+}
+
+/** Circular play/pause button explicitly toggles play/pause */
+function toggleTrackPlayback(track: typeof tracks.value[0]): void {
+  if (player.currentTrack.value?.id !== track.id) {
+    player.setQueue(filteredTracks.value)
+  }
   player.selectTrack(track)
+}
+
+/** Up Next drawer track row click */
+function selectQueueTrack(track: typeof tracks.value[0]): void {
+  if (player.currentTrack.value?.id === track.id) {
+    if (!player.isPlaying.value) player.play()
+  } else {
+    player.selectTrack(track)
+  }
+  playlistOpen.value = false
   activeTab.value = 'player'
 }
 
@@ -235,6 +254,66 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') closeSheets()
 }
 
+// When last track is removed, exit back to library empty state
+watch(
+  () => tracks.value.length,
+  (count) => {
+    if (count === 0) {
+      playlistOpen.value = false
+      sleepOpen.value = false
+      activeTab.value = 'library'
+    }
+  },
+)
+
+/* ------------------------------------------------------------------ */
+/* Swipe-to-Dismiss Gestures for Bottom Sheets                        */
+/* ------------------------------------------------------------------ */
+
+const playlistDragOffset = ref(0)
+const isDraggingPlaylist = ref(false)
+let touchStartYPlaylist = 0
+
+function onPlaylistTouchStart(e: TouchEvent): void {
+  touchStartYPlaylist = e.touches[0].clientY
+  isDraggingPlaylist.value = true
+}
+function onPlaylistTouchMove(e: TouchEvent): void {
+  if (!isDraggingPlaylist.value) return
+  const deltaY = e.touches[0].clientY - touchStartYPlaylist
+  playlistDragOffset.value = deltaY > 0 ? deltaY : 0
+}
+function onPlaylistTouchEnd(): void {
+  if (!isDraggingPlaylist.value) return
+  isDraggingPlaylist.value = false
+  if (playlistDragOffset.value > 80) {
+    playlistOpen.value = false
+  }
+  playlistDragOffset.value = 0
+}
+
+const sleepDragOffset = ref(0)
+const isDraggingSleep = ref(false)
+let touchStartYSleep = 0
+
+function onSleepTouchStart(e: TouchEvent): void {
+  touchStartYSleep = e.touches[0].clientY
+  isDraggingSleep.value = true
+}
+function onSleepTouchMove(e: TouchEvent): void {
+  if (!isDraggingSleep.value) return
+  const deltaY = e.touches[0].clientY - touchStartYSleep
+  sleepDragOffset.value = deltaY > 0 ? deltaY : 0
+}
+function onSleepTouchEnd(): void {
+  if (!isDraggingSleep.value) return
+  isDraggingSleep.value = false
+  if (sleepDragOffset.value > 80) {
+    sleepOpen.value = false
+  }
+  sleepDragOffset.value = 0
+}
+
 onMounted(async () => {
   loadLiked()
   window.addEventListener('keydown', onKeydown)
@@ -248,244 +327,212 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    class="relative isolate flex h-dvh select-none flex-col overflow-hidden overscroll-none bg-[#09090b] text-zinc-100"
-  >
-    <!-- Background subtle ambient glow (cool indigo/slate, no hot pink) -->
-    <div
-      class="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[480px] w-[480px] -translate-x-1/2 rounded-full bg-indigo-950/20 blur-3xl"
-    ></div>
-    <div
-      v-if="currentTrack"
-      :style="{ backgroundImage: `radial-gradient(circle at center, rgba(99, 102, 241, 0.12), transparent 70%)` }"
-      class="pointer-events-none absolute inset-0 -z-10 transition-opacity duration-700"
-    ></div>
-
-    <!-- Hidden file input for importing audio -->
+  <div class="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#09090b] text-zinc-100 antialiased select-none">
+    <!-- Hidden native file picker -->
     <input
       ref="fileInput"
       type="file"
-      accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg"
+      accept="audio/*,.mp3,.m4a,.aac,.wav,.wave,.ogg,.oga,.flac"
       multiple
       class="hidden"
       @change="onFilesSelected"
     />
 
-    <!-- Notice banner -->
-    <div
-      v-if="notice || playbackError"
-      class="fixed top-[calc(env(safe-area-inset-top,0px)+1rem)] inset-x-5 z-50 text-center text-xs"
-      aria-live="polite"
-      role="status"
+    <!-- Notice Toast -->
+    <transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="-translate-y-4 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="-translate-y-4 opacity-0"
     >
-      <p v-if="notice" class="mx-auto inline-block rounded-full bg-zinc-900/95 px-4 py-2 text-zinc-200 ring-1 ring-zinc-700/60 shadow-xl backdrop-blur-md">
+      <div
+        v-if="notice"
+        class="fixed top-4 inset-x-4 z-50 mx-auto max-w-sm rounded-2xl bg-zinc-900/95 px-4 py-3 text-center text-xs font-semibold text-zinc-200 shadow-2xl ring-1 ring-white/10 backdrop-blur-md"
+        role="status"
+      >
         {{ notice }}
-      </p>
-      <p v-else-if="playbackError" class="mx-auto inline-block rounded-full bg-red-950/90 px-4 py-2 text-red-200 ring-1 ring-red-500/40 shadow-xl backdrop-blur-md">
-        {{ playbackError }}
-      </p>
+      </div>
+    </transition>
+
+    <!-- Error Banner -->
+    <div
+      v-if="playbackError"
+      class="fixed top-16 inset-x-4 z-40 mx-auto max-w-sm rounded-2xl bg-red-950/90 px-4 py-3 text-center text-xs font-semibold text-red-200 shadow-xl ring-1 ring-red-500/30 backdrop-blur-md"
+    >
+      {{ playbackError }}
     </div>
 
     <!-- ============================================================== -->
-    <!-- VIEW 1: LIBRARY & DISCOVERY                                    -->
+    <!-- VIEW 1: LIBRARY / DISCOVERY SCREEN                             -->
     <!-- ============================================================== -->
     <div
       v-show="activeTab === 'library'"
-      class="flex h-full flex-col overflow-hidden pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]"
-      :class="currentTrack ? 'pb-24' : 'pb-6'"
+      class="flex h-full flex-col overflow-hidden"
     >
-      <!-- Brand Header (Clean Titanium & Electric Indigo branding) -->
-      <header class="flex items-center justify-between px-6 pt-2 pb-3">
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-          >
-            <AudioLines :size="22" :stroke-width="2.5" class="text-white" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <h1 class="text-2xl font-black tracking-tight text-white">Pulse</h1>
-              <span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-zinc-700">
-                PWA
-              </span>
+      <!-- Scrollable content area (padded at bottom to clear mini player) -->
+      <div class="flex-1 overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-32">
+        <!-- Top App Bar with Branding and Actions -->
+        <header class="mb-5 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-indigo-400 shadow-lg shadow-indigo-600/25 ring-1 ring-white/20">
+              <AudioLines :size="22" class="text-white" />
             </div>
-            <p class="text-xs font-medium text-zinc-400">
-              {{ localCount }} {{ localCount === 1 ? 'track' : 'tracks' }} offline
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <!-- Sleep timer shortcut button in header -->
-          <button
-            type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
-            :class="
-              sleep.isActive.value
-                ? 'bg-indigo-500/20 text-indigo-300 ring-indigo-500/50'
-                : 'bg-zinc-900/80 text-zinc-300 ring-zinc-800 hover:text-white'
-            "
-            :aria-label="sleep.isActive.value ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'"
-            :title="sleep.isActive.value ? `Sleep: ${sleepLabel}` : 'Sleep timer'"
-            @click="sleepOpen = true"
-          >
-            <Moon :size="16" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
-          </button>
-
-          <!-- Search toggle -->
-          <button
-            type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
-            :class="showSearch ? 'bg-indigo-600/30 text-white ring-indigo-500/50' : 'bg-zinc-900/80 text-zinc-300 ring-zinc-800 hover:text-white'"
-            aria-label="Search library"
-            @click="showSearch = !showSearch"
-          >
-            <Search :size="16" aria-hidden="true" />
-          </button>
-
-          <!-- Import button (Professional indigo accent) -->
-          <button
-            type="button"
-            class="flex h-10 items-center gap-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 px-3.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition active:scale-95 disabled:opacity-50"
-            :disabled="isImporting"
-            @click="openFilePicker"
-          >
-            <Plus :size="14" :stroke-width="3" aria-hidden="true" />
-            <span>{{ isImporting ? 'Importing…' : 'Import' }}</span>
-          </button>
-        </div>
-      </header>
-
-      <!-- Expandable Search Input -->
-      <div v-if="showSearch" class="px-6 py-2">
-        <div class="relative flex items-center">
-          <Search :size="16" class="pointer-events-none absolute left-3.5 text-zinc-500" aria-hidden="true" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search songs or artists…"
-            class="w-full rounded-2xl bg-zinc-900/90 py-2.5 pr-10 pl-10 text-sm text-zinc-100 placeholder-zinc-500 ring-1 ring-zinc-800 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            v-if="searchQuery"
-            type="button"
-            class="absolute right-3 text-zinc-400 hover:text-white"
-            aria-label="Clear search"
-            @click="searchQuery = ''"
-          >
-            <X :size="16" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Category Filter Pills (Clean Titanium & Indigo) -->
-      <nav class="flex items-center gap-2 overflow-x-auto px-6 py-2.5 no-scrollbar" aria-label="Library filters">
-        <button
-          type="button"
-          class="shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition active:scale-95"
-          :class="
-            selectedFilter === 'all'
-              ? 'bg-zinc-100 text-zinc-950 shadow-sm'
-              : 'bg-zinc-900/70 text-zinc-400 ring-1 ring-zinc-800 hover:text-zinc-200'
-          "
-          @click="selectedFilter = 'all'"
-        >
-          All
-        </button>
-        <button
-          type="button"
-          class="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition active:scale-95"
-          :class="
-            selectedFilter === 'liked'
-              ? 'bg-zinc-100 text-zinc-950 shadow-sm'
-              : 'bg-zinc-900/70 text-zinc-400 ring-1 ring-zinc-800 hover:text-zinc-200'
-          "
-          @click="selectedFilter = 'liked'"
-        >
-          <Heart :size="12" :fill="selectedFilter === 'liked' ? 'currentColor' : 'none'" aria-hidden="true" />
-          <span>Liked Songs ({{ likedIds.size }})</span>
-        </button>
-        <button
-          type="button"
-          class="shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition active:scale-95"
-          :class="
-            selectedFilter === 'recent'
-              ? 'bg-zinc-100 text-zinc-950 shadow-sm'
-              : 'bg-zinc-900/70 text-zinc-400 ring-1 ring-zinc-800 hover:text-zinc-200'
-          "
-          @click="selectedFilter = 'recent'"
-        >
-          Recent
-        </button>
-      </nav>
-
-      <!-- Scrollable Body Content -->
-      <div class="flex-1 overflow-y-auto px-6 pb-6">
-        <!-- Hero Feature Card -->
-        <section class="mt-2 mb-6" aria-label="Featured music banner">
-          <div
-            v-if="tracks.length === 0"
-            class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-indigo-950/30 p-6 ring-1 ring-white/10 shadow-xl backdrop-blur-xl"
-          >
-            <div class="relative z-10">
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-300 ring-1 ring-indigo-500/30">
-                <Sparkles :size="12" /> Offline & Private
-              </span>
-              <h2 class="mt-2 text-xl font-bold tracking-tight text-white">Your Personal Vault</h2>
-              <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
-                No algorithms, trackers, or subscriptions. Import your own MP3, M4A, or WAV files to listen 100% offline anytime.
+            <div>
+              <div class="flex items-center gap-1.5">
+                <h1 class="text-xl font-bold tracking-tight text-white">Pulse</h1>
+                <span class="rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-400 ring-1 ring-indigo-500/30">
+                  OFFLINE
+                </span>
+              </div>
+              <p class="text-xs text-zinc-400">
+                {{ localCount }} {{ localCount === 1 ? 'track' : 'tracks' }} offline
               </p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <!-- Search toggle -->
+            <button
+              type="button"
+              class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
+              aria-label="Toggle search"
+              @click="showSearch = !showSearch"
+            >
+              <Search :size="18" />
+            </button>
+
+            <!-- Import button -->
+            <button
+              type="button"
+              class="flex items-center gap-1.5 rounded-full bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500 disabled:opacity-50"
+              :disabled="isImporting"
+              @click="openFilePicker"
+            >
+              <Plus :size="15" />
+              <span>{{ isImporting ? 'Adding...' : 'Import' }}</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Search input (collapsible) -->
+        <transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="-translate-y-2 opacity-0"
+          enter-to-class="translate-y-0 opacity-100"
+          leave-active-class="transition duration-100 ease-in"
+          leave-from-class="translate-y-0 opacity-100"
+          leave-to-class="-translate-y-2 opacity-0"
+        >
+          <div v-if="showSearch" class="mb-4">
+            <div class="relative flex items-center">
+              <Search :size="16" class="pointer-events-none absolute left-3.5 text-zinc-400" />
+              <input
+                v-model="searchQuery"
+                type="search"
+                placeholder="Search tracks or artists..."
+                class="w-full rounded-2xl bg-zinc-900/90 py-2.5 pr-10 pl-10 text-xs font-medium text-white placeholder-zinc-500 ring-1 ring-white/10 backdrop-blur-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
               <button
+                v-if="searchQuery"
                 type="button"
-                class="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-zinc-950 shadow-md transition active:scale-95"
-                @click="openFilePicker"
+                class="absolute right-3 text-zinc-400 hover:text-white"
+                @click="searchQuery = ''"
               >
-                <Plus :size="14" :stroke-width="3" />
-                <span>Import Audio Files</span>
+                <X :size="14" />
               </button>
             </div>
           </div>
+        </transition>
 
-          <div
-            v-else-if="currentTrack"
-            class="relative flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-indigo-950/40 p-5 ring-1 ring-white/10 shadow-xl backdrop-blur-xl transition active:scale-[0.99] cursor-pointer"
-            @click="activeTab = 'player'"
+        <!-- Filter Pills Bar -->
+        <div class="mb-5 flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            :class="
+              selectedFilter === 'all'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+            "
+            @click="selectedFilter = 'all'"
           >
-            <div class="min-w-0 flex-1 pr-4">
-              <span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-300 ring-1 ring-indigo-500/30">
+            <span>All</span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            :class="
+              selectedFilter === 'liked'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+            "
+            @click="selectedFilter = 'liked'"
+          >
+            <Heart :size="13" :fill="selectedFilter === 'liked' ? 'currentColor' : 'none'" />
+            <span>Liked Songs ({{ likedIds.size }})</span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            :class="
+              selectedFilter === 'recent'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+            "
+            @click="selectedFilter = 'recent'"
+          >
+            <span>Recent</span>
+          </button>
+        </div>
+
+        <!-- Featured / Active Hero Banner -->
+        <div
+          v-if="currentTrack"
+          class="relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950/70 via-zinc-900/80 to-zinc-900/90 p-5 ring-1 ring-indigo-500/20 shadow-xl"
+        >
+          <div class="relative z-10 flex items-center justify-between gap-4">
+            <div class="min-w-0 flex-1">
+              <span class="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-indigo-400 uppercase">
+                <Sparkles :size="12" />
                 Now Playing
               </span>
-              <h3 class="mt-1.5 truncate text-base font-bold text-white">{{ currentTrack.title }}</h3>
+              <h2 class="mt-1 truncate text-base font-bold text-white">
+                {{ currentTrack.title }}
+              </h2>
               <p class="truncate text-xs text-zinc-400">{{ currentTrack.artist }}</p>
-              <div class="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  class="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1 text-xs font-bold text-zinc-950 shadow transition active:scale-90"
-                  @click.stop="player.togglePlay()"
-                >
-                  <Pause v-if="isPlaying" :size="12" fill="currentColor" />
-                  <Play v-else :size="12" fill="currentColor" />
-                  <span>{{ isPlaying ? 'Pause' : 'Resume' }}</span>
-                </button>
-              </div>
+
+              <button
+                type="button"
+                class="mt-3.5 inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-zinc-950 shadow-md transition active:scale-95 hover:bg-zinc-200"
+                @click="activeTab = 'player'"
+              >
+                <Maximize2 :size="13" />
+                <span>Open Player</span>
+              </button>
             </div>
-            <div class="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/10">
+
+            <!-- Artwork Thumbnail -->
+            <div
+              class="relative h-20 w-20 shrink-0 cursor-pointer overflow-hidden rounded-2xl bg-zinc-800 ring-1 ring-white/10 shadow-lg"
+              @click="activeTab = 'player'"
+            >
               <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
               <div
                 v-if="isPlaying"
-                class="absolute inset-0 flex items-end justify-center gap-0.5 bg-black/40 pb-2"
-                aria-hidden="true"
+                class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]"
               >
                 <span
                   v-for="n in 3"
                   :key="n"
-                  class="animate-eq h-3.5 w-1 origin-bottom rounded-full bg-indigo-400"
+                  class="animate-eq mx-[1px] h-4 w-1 rounded-full bg-indigo-400"
                   :style="{ animationDelay: `${n * 0.15}s` }"
                 ></span>
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
         <!-- Track List -->
         <section aria-label="Track list">
@@ -514,7 +561,7 @@ onBeforeUnmount(() => {
               class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 ring-white/[0.06] transition active:scale-[0.99] active:bg-zinc-800/80"
               :class="{ 'bg-indigo-950/30 ring-indigo-500/30': currentTrack?.id === track.id }"
             >
-              <!-- Song Info & Thumbnail -->
+              <!-- Song Info & Thumbnail (Tap navigates to player without pausing) -->
               <div
                 class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 pr-2"
                 @click="playTrackAndShow(track)"
@@ -545,7 +592,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <!-- Actions: Duration + Circular Play + Favorite + Delete -->
+              <!-- Actions: Duration + Favorite + Circular Play + Delete -->
               <div class="flex shrink-0 items-center gap-2">
                 <span class="text-xs tabular-nums text-zinc-500">
                   {{ formatTrackDuration(track.duration) }}
@@ -562,22 +609,22 @@ onBeforeUnmount(() => {
                   <Heart :size="15" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" />
                 </button>
 
-                <!-- Circular Play Button -->
+                <!-- Circular Play Button (Explicitly toggles playback) -->
                 <button
                   type="button"
                   class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition active:scale-90 active:bg-white/20"
                   :aria-label="currentTrack?.id === track.id && isPlaying ? 'Pause' : 'Play'"
-                  @click.stop="player.selectTrack(track)"
+                  @click.stop="toggleTrackPlayback(track)"
                 >
-                  <Pause v-if="currentTrack?.id === track.id && isPlaying" :size="14" fill="currentColor" />
-                  <Play v-else :size="14" fill="currentColor" class="translate-x-0.5" />
+                  <Pause v-if="currentTrack?.id === track.id && isPlaying" :size="15" fill="currentColor" />
+                  <Play v-else :size="15" fill="currentColor" class="translate-x-0.5" />
                 </button>
 
-                <!-- Delete Trash Button -->
+                <!-- Delete button for local files -->
                 <button
                   v-if="track.kind === 'local'"
                   type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition active:scale-90 active:text-red-400"
+                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 opacity-60 transition active:scale-90 active:text-red-400 hover:opacity-100"
                   :aria-label="`Delete ${track.title}`"
                   @click.stop="removeTrack(track.id, track.title)"
                 >
@@ -589,72 +636,82 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
-      <!-- ============================================================ -->
-      <!-- UNIFIED PROFESSIONAL BOTTOM MINI-PLAYER (Replaces Awkward Dock)-->
-      <!-- ============================================================ -->
+      <!-- ============================================================== -->
+      <!-- UNIFIED BOTTOM MINI-PLAYER BAR                                 -->
+      <!-- ============================================================== -->
       <div
         v-if="currentTrack"
-        class="fixed bottom-0 inset-x-0 z-30 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-1 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent backdrop-blur-md"
+        class="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-30"
       >
         <div
-          class="relative flex items-center justify-between overflow-hidden rounded-2xl bg-zinc-900/95 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition active:scale-[0.99] cursor-pointer"
-          @click="activeTab = 'player'"
+          class="relative flex flex-col overflow-hidden rounded-2xl bg-zinc-900/95 p-2 shadow-2xl ring-1 ring-white/15 backdrop-blur-xl transition active:scale-[0.99]"
         >
-          <!-- Top edge micro progress bar -->
-          <div class="absolute top-0 inset-x-3 h-[2px] overflow-hidden rounded-full bg-zinc-800">
+          <!-- Top subtle progress stripe -->
+          <div class="absolute inset-x-0 top-0 h-[2px] bg-zinc-800">
             <div
               class="h-full bg-indigo-500 transition-all duration-150"
               :style="{ width: `${progressPercent}%` }"
             ></div>
           </div>
 
-          <div class="flex min-w-0 flex-1 items-center gap-3">
-            <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10">
-              <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
-              <div
-                v-if="isPlaying"
-                class="absolute inset-0 flex items-center justify-center bg-black/40"
-              >
-                <span
-                  v-for="n in 3"
-                  :key="n"
-                  class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-indigo-400"
-                  :style="{ animationDelay: `${n * 0.15}s` }"
-                ></span>
+          <div class="flex items-center justify-between pt-1">
+            <!-- Left Info (Tap opens Now Playing) -->
+            <div
+              class="flex min-w-0 flex-1 cursor-pointer items-center gap-3"
+              @click="activeTab = 'player'"
+            >
+              <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10">
+                <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
+                <div
+                  v-if="isPlaying"
+                  class="absolute inset-0 flex items-center justify-center bg-black/40"
+                >
+                  <span
+                    v-for="n in 3"
+                    :key="n"
+                    class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-indigo-400"
+                    :style="{ animationDelay: `${n * 0.15}s` }"
+                  ></span>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-xs font-bold text-zinc-100">{{ currentTrack.title }}</p>
+                <p class="truncate text-[11px] text-zinc-400">{{ currentTrack.artist }}</p>
               </div>
             </div>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-xs font-bold text-zinc-100">{{ currentTrack.title }}</p>
-              <p class="truncate text-[11px] text-zinc-400">{{ currentTrack.artist }}</p>
-            </div>
-          </div>
 
-          <div class="flex items-center gap-2 pl-2">
-            <!-- Favorite button in mini player -->
-            <button
-              type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition active:scale-90"
-              :class="{ 'text-rose-500': likedIds.has(currentTrack.id) }"
-              :aria-label="likedIds.has(currentTrack.id) ? 'Unlike' : 'Like'"
-              @click.stop="toggleLike(currentTrack.id)"
-            >
-              <Heart :size="16" :fill="likedIds.has(currentTrack.id) ? 'currentColor' : 'none'" />
-            </button>
+            <div class="flex items-center gap-2 pl-2">
+              <!-- Favorite button in mini player -->
+              <button
+                type="button"
+                class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition active:scale-90"
+                :class="{ 'text-rose-500': likedIds.has(currentTrack.id) }"
+                :aria-label="likedIds.has(currentTrack.id) ? 'Unlike' : 'Like'"
+                @click.stop="toggleLike(currentTrack.id)"
+              >
+                <Heart :size="16" :fill="likedIds.has(currentTrack.id) ? 'currentColor' : 'none'" />
+              </button>
 
-            <!-- Play / Pause in mini player -->
-            <button
-              type="button"
-              class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90"
-              :aria-label="isPlaying ? 'Pause' : 'Play'"
-              @click.stop="player.togglePlay()"
-            >
-              <Pause v-if="isPlaying" :size="16" fill="currentColor" />
-              <Play v-else :size="16" fill="currentColor" class="translate-x-0.5" />
-            </button>
+              <!-- Play / Pause in mini player -->
+              <button
+                type="button"
+                class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90"
+                :aria-label="isPlaying ? 'Pause' : 'Play'"
+                @click.stop="player.togglePlay()"
+              >
+                <Pause v-if="isPlaying" :size="16" fill="currentColor" />
+                <Play v-else :size="16" fill="currentColor" class="translate-x-0.5" />
+              </button>
 
-            <!-- Expand indicator -->
-            <div class="flex h-8 w-8 items-center justify-center text-zinc-400" title="Expand player">
-              <Maximize2 :size="14" aria-hidden="true" />
+              <!-- Expand indicator -->
+              <button
+                type="button"
+                class="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white"
+                aria-label="Expand player"
+                @click="activeTab = 'player'"
+              >
+                <Maximize2 :size="14" aria-hidden="true" />
+              </button>
             </div>
           </div>
         </div>
@@ -688,31 +745,28 @@ onBeforeUnmount(() => {
           <!-- Up Next Queue button -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
-            aria-label="Up next queue"
-            aria-haspopup="dialog"
-            :aria-expanded="playlistOpen"
+            class="flex items-center gap-1.5 rounded-full bg-zinc-900/80 px-3 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-95 hover:text-white"
+            aria-label="Open queue"
             @click="playlistOpen = true"
           >
-            <ListMusic :size="18" aria-hidden="true" />
+            <ListMusic :size="15" />
+            <span>Up Next</span>
           </button>
 
-          <!-- Sleep timer modal button -->
+          <!-- Sleep Timer button -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
+            class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 backdrop-blur-md"
             :class="
               sleep.isActive.value
-                ? 'bg-indigo-600/30 text-indigo-300 ring-indigo-500/60 shadow-lg shadow-indigo-600/30'
-                : 'bg-zinc-900/80 text-zinc-300 ring-white/10 backdrop-blur-md hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white'
             "
-            :aria-label="sleep.isActive.value ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'"
-            :title="sleep.isActive.value ? `Sleep: ${sleepLabel}` : 'Sleep timer'"
-            aria-haspopup="dialog"
-            :aria-expanded="sleepOpen"
+            aria-label="Open sleep timer"
             @click="sleepOpen = true"
           >
-            <Moon :size="17" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
+            <Moon :size="14" />
+            <span>{{ sleepLabel }}</span>
           </button>
         </div>
       </header>
@@ -759,7 +813,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- Right Peek Artwork (Next Track) -->
+          <!-- Right Peek Artwork (Next Track - exact match to upcoming queue/shuffle) -->
           <div
             v-if="nextTrack"
             class="absolute -right-3 z-0 h-44 w-12 cursor-pointer overflow-hidden rounded-2xl opacity-30 blur-[1px] transition-all duration-300 active:scale-95"
@@ -781,6 +835,7 @@ onBeforeUnmount(() => {
             </p>
             <MarqueeText
               :text="currentTrack?.title ?? 'Ready to Play'"
+              :active="activeTab === 'player'"
               class="text-2xl font-bold tracking-tight text-white"
             />
           </div>
@@ -808,91 +863,86 @@ onBeforeUnmount(() => {
         />
 
         <!-- Primary Transport Controls -->
-        <div class="flex items-center justify-between pt-1">
-          <!-- Shuffle -->
+        <div class="flex items-center justify-between py-1">
+          <!-- Shuffle Button -->
           <button
             type="button"
             class="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90"
-            :class="isShuffle ? 'text-indigo-400' : 'text-zinc-500'"
-            aria-label="Shuffle"
+            :class="isShuffle ? 'text-indigo-400 bg-indigo-500/10 ring-1 ring-indigo-500/30' : 'text-zinc-400 hover:text-white'"
+            :aria-label="isShuffle ? 'Disable shuffle' : 'Enable shuffle'"
             @click="player.toggleShuffle()"
           >
-            <Shuffle :size="20" aria-hidden="true" />
+            <Shuffle :size="18" />
           </button>
 
-          <!-- 10s Rewind -->
+          <!-- 10s Backward Skip -->
           <button
             type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 disabled:opacity-40"
-            :disabled="!currentTrack"
+            class="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition active:scale-90 hover:text-white"
             aria-label="Rewind 10 seconds"
             @click="player.seekBy(-10)"
           >
-            <RotateCcw :size="18" aria-hidden="true" />
+            <RotateCcw :size="20" />
           </button>
 
-          <!-- Skip Previous -->
+          <!-- Previous Track -->
           <button
             type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-full text-white transition active:scale-90 disabled:opacity-40"
-            :disabled="!currentTrack"
+            class="flex h-12 w-12 items-center justify-center rounded-full text-white transition active:scale-90 hover:text-indigo-400"
             aria-label="Previous track"
             @click="player.previous()"
           >
-            <SkipBack :size="26" fill="currentColor" aria-hidden="true" />
+            <SkipBack :size="24" fill="currentColor" />
           </button>
 
-          <!-- Main Center Circular Play/Pause -->
+          <!-- Main Play / Pause Hero Button -->
           <button
             type="button"
-            class="flex h-16 w-16 items-center justify-center rounded-full bg-white text-zinc-950 shadow-xl shadow-black/50 ring-4 ring-white/10 transition active:scale-90 disabled:opacity-50"
-            :disabled="!currentTrack"
+            class="flex h-18 w-18 items-center justify-center rounded-full bg-white text-zinc-950 shadow-2xl shadow-white/20 transition active:scale-95 hover:bg-zinc-100"
             :aria-label="isPlaying ? 'Pause' : 'Play'"
             @click="player.togglePlay()"
           >
-            <Pause v-if="isPlaying" :size="28" fill="currentColor" />
-            <Play v-else :size="28" fill="currentColor" class="translate-x-0.5" />
+            <Pause v-if="isPlaying" :size="30" fill="currentColor" />
+            <Play v-else :size="30" fill="currentColor" class="translate-x-0.5" />
           </button>
 
-          <!-- Skip Next -->
+          <!-- Next Track -->
           <button
             type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-full text-white transition active:scale-90 disabled:opacity-40"
-            :disabled="!currentTrack"
+            class="flex h-12 w-12 items-center justify-center rounded-full text-white transition active:scale-90 hover:text-indigo-400"
             aria-label="Next track"
             @click="player.next()"
           >
-            <SkipForward :size="26" fill="currentColor" aria-hidden="true" />
+            <SkipForward :size="24" fill="currentColor" />
           </button>
 
-          <!-- 10s Forward -->
+          <!-- 10s Forward Skip -->
           <button
             type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 disabled:opacity-40"
-            :disabled="!currentTrack"
+            class="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition active:scale-90 hover:text-white"
             aria-label="Forward 10 seconds"
             @click="player.seekBy(10)"
           >
-            <RotateCw :size="18" aria-hidden="true" />
+            <RotateCw :size="20" />
           </button>
 
-          <!-- Repeat Mode -->
+          <!-- Repeat Mode Button -->
           <button
             type="button"
             class="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90"
-            :class="repeatMode === 'off' ? 'text-zinc-500' : 'text-indigo-400'"
-            :aria-label="`Repeat: ${repeatMode}`"
+            :class="repeatMode !== 'off' ? 'text-indigo-400 bg-indigo-500/10 ring-1 ring-indigo-500/30' : 'text-zinc-400 hover:text-white'"
+            :aria-label="`Repeat mode: ${repeatMode}`"
             @click="player.cycleRepeat()"
           >
-            <Repeat1 v-if="repeatMode === 'one'" :size="20" aria-hidden="true" />
-            <Repeat v-else :size="20" aria-hidden="true" />
+            <Repeat1 v-if="repeatMode === 'one'" :size="18" />
+            <Repeat v-else :size="18" />
           </button>
         </div>
       </section>
     </div>
 
     <!-- ============================================================== -->
-    <!-- PLAYLIST "UP NEXT" DRAWER BOTTOM SHEET                         -->
+    <!-- UP NEXT QUEUE BOTTOM SHEET                                     -->
     <!-- ============================================================== -->
     <div
       class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
@@ -904,11 +954,18 @@ onBeforeUnmount(() => {
     <aside
       class="fixed inset-x-0 bottom-0 z-50 flex h-[78dvh] flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
       :class="playlistOpen ? 'translate-y-0' : 'translate-y-full'"
+      :style="playlistDragOffset > 0 ? { transform: `translateY(${playlistDragOffset}px)`, transition: 'none' } : {}"
       :inert="playlistOpen ? undefined : true"
       role="dialog"
       aria-label="Playlist queue"
     >
-      <div class="flex items-center justify-between px-6 pt-4 pb-2">
+      <div
+        class="flex items-center justify-between px-6 pt-4 pb-2 cursor-grab active:cursor-grabbing"
+        @touchstart="onPlaylistTouchStart"
+        @touchmove="onPlaylistTouchMove"
+        @touchend="onPlaylistTouchEnd"
+        @touchcancel="onPlaylistTouchEnd"
+      >
         <div>
           <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
           <h2 class="text-xl font-bold text-white">Up Next</h2>
@@ -924,7 +981,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="tracks.length === 0"
+        v-if="player.queue.value.length === 0"
         class="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-10 text-center"
       >
         <ListMusic :size="40" class="text-zinc-600" aria-hidden="true" />
@@ -940,7 +997,7 @@ onBeforeUnmount(() => {
 
       <ul v-else class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 space-y-1.5" aria-label="Queued tracks">
         <li
-          v-for="track in tracks"
+          v-for="track in player.queue.value"
           :key="track.id"
           class="flex items-center justify-between rounded-2xl p-2.5 transition active:bg-zinc-800/80"
           :class="currentTrack?.id === track.id ? 'bg-indigo-950/40 ring-1 ring-indigo-500/30' : 'bg-zinc-800/40'"
@@ -948,7 +1005,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="flex min-w-0 flex-1 items-center gap-3 text-left"
-            @click="player.selectTrack(track); playlistOpen = false"
+            @click="selectQueueTrack(track)"
           >
             <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800">
               <img :src="track.coverUrl" alt="" class="h-full w-full object-cover" />
@@ -1005,13 +1062,20 @@ onBeforeUnmount(() => {
     <aside
       class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
       :class="sleepOpen ? 'translate-y-0' : 'translate-y-full'"
+      :style="sleepDragOffset > 0 ? { transform: `translateY(${sleepDragOffset}px)`, transition: 'none' } : {}"
       :inert="sleepOpen ? undefined : true"
       role="dialog"
       aria-label="Sleep timer"
     >
-      <div class="flex items-center justify-between px-6 pt-4 pb-2">
+      <div
+        class="flex items-center justify-between px-6 pt-4 pb-2 cursor-grab active:cursor-grabbing"
+        @touchstart="onSleepTouchStart"
+        @touchmove="onSleepTouchMove"
+        @touchend="onSleepTouchEnd"
+        @touchcancel="onSleepTouchEnd"
+      >
         <div>
-          <div class="mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
+          <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
           <h2 class="text-xl font-bold text-white">Sleep Timer</h2>
         </div>
         <button

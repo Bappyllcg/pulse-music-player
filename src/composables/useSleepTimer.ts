@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue'
-import { usePlayer } from './usePlayer'
+import { onPlayerTimeUpdate, usePlayer } from './usePlayer'
 
 export const SLEEP_MINUTE_OPTIONS = [5, 10, 15, 30, 45, 60] as const
 
@@ -71,6 +71,10 @@ export function useSleepTimer() {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') tick()
     })
+    // iOS Safari lock-screen continuity:
+    // When the screen is locked, WebKit freezes setInterval, but <audio> timeupdate
+    // continues firing on the media thread. We check the wall-clock deadline on each audio tick.
+    onPlayerTimeUpdate(tick)
   }
 
   return {
@@ -83,4 +87,3 @@ export function useSleepTimer() {
     cancel,
   }
 }
-

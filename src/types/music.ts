@@ -8,6 +8,8 @@ export interface TrackRecord {
   duration: number
   /** Audio bytes for user-imported local files. */
   blob?: Blob
+  /** Optional embedded album art extracted from ID3 APIC frame. */
+  coverBlob?: Blob
   /** Remote URL for streamed tracks. */
   remoteUrl?: string
   coverUrl: string
@@ -24,5 +26,5 @@ export interface PlayableTrack extends Omit<TrackRecord, 'blob'> {
 export interface ImportResult {
   added: number
   skipped: string[]
+  duplicates: number
 }
-

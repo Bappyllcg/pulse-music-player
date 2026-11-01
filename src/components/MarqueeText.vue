@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-const props = defineProps<{ text: string }>()
+const props = defineProps<{
+  text: string
+  active?: boolean
+}>()
 
 const container = ref<HTMLElement | null>(null)
 const textEl = ref<HTMLElement | null>(null)
@@ -13,8 +16,12 @@ const SPEED_PX_PER_SECOND = 40
 
 function measure(): void {
   if (!container.value || !textEl.value) return
+  const containerWidth = container.value.clientWidth
+  // If container is hidden (display: none / clientWidth === 0), avoid falsely resetting overflowing
+  if (containerWidth <= 0) return
+
   const textWidth = textEl.value.getBoundingClientRect().width
-  overflowing.value = textWidth > container.value.clientWidth + 1
+  overflowing.value = textWidth > containerWidth + 1
   durationSeconds.value = Math.max(8, (textWidth + GAP_PX) / SPEED_PX_PER_SECOND)
 }
 
@@ -23,8 +30,11 @@ let observer: ResizeObserver | null = null
 onMounted(() => {
   measure()
   if (container.value && typeof ResizeObserver !== 'undefined') {
-    observer = new ResizeObserver(measure)
+    observer = new ResizeObserver(() => {
+      measure()
+    })
     observer.observe(container.value)
+    if (textEl.value) observer.observe(textEl.value)
   }
 })
 
@@ -35,6 +45,16 @@ watch(
   async () => {
     await nextTick()
     measure()
+  },
+)
+
+watch(
+  () => props.active,
+  async (isActive) => {
+    if (isActive) {
+      await nextTick()
+      measure()
+    }
   },
 )
 </script>
@@ -51,4 +71,3 @@ watch(
     </div>
   </div>
 </template>
-
