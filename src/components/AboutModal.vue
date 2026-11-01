@@ -7,7 +7,6 @@ import {
   Database,
   ExternalLink,
   Globe,
-  Heart,
   Info,
   Music,
   Radio,
@@ -215,7 +214,7 @@ onBeforeUnmount(() => {
           <div class="mt-4 flex items-center gap-2">
             <h1 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Pulse Player</h1>
             <span class="rounded-full px-2.5 py-0.5 text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30">
-              v1.0.0
+              v2.0.0
             </span>
           </div>
 
@@ -481,10 +480,16 @@ onBeforeUnmount(() => {
       <div class="flex items-center justify-between border-t px-6 py-3.5 backdrop-blur-xl
                   bg-white/95 border-slate-200/80
                   dark:bg-zinc-900/90 dark:border-white/[0.08]">
-        <div class="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-zinc-500">
-          <span>Crafted with</span>
-          <Heart :size="12" class="text-rose-500 fill-rose-500" />
-          <span>for music lovers</span>
+        <div class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-500">
+          <span>Developed By:</span>
+          <a
+            href="https://llcgteam.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline transition"
+          >
+            LLCG Team
+          </a>
         </div>
         <button
           type="button"

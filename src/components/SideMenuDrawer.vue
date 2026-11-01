@@ -107,7 +107,7 @@ function onOpenSettings(): void {
             </div>
             <div>
               <h2 class="text-base font-bold text-slate-900 dark:text-white tracking-tight">Pulse Hub</h2>
-              <span class="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">v1.0.0 • PWA</span>
+              <span class="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">v2.0.0 • PWA</span>
             </div>
           </div>
 

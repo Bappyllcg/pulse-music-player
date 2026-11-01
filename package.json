@@ -1,7 +1,7 @@
 {
   "name": "pulse-player",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Pulse Player - offline-first iOS music player PWA",
   "type": "module",
   "scripts": {
