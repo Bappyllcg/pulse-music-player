@@ -44,7 +44,16 @@ const sleep = useSleepTimer()
 const onlineMusic = useOnlineMusic()
 
 const { tracks, localCount, isImporting } = storage
-const { onlineTracks, isLoadingOnline, onlineError, fetchOnlineTracks } = onlineMusic
+const {
+  onlineTracks,
+  isLoadingOnline,
+  onlineError,
+  activeGenreId,
+  genres: onlineGenres,
+  selectGenre,
+  searchOnline,
+  fetchOnlineTracks,
+} = onlineMusic
 const {
   currentTrack,
   isPlaying,
@@ -61,16 +70,42 @@ const activeTab = ref<'library' | 'player'>('library')
 /** Filter tabs in library: 'all' | 'liked' | 'recent' | 'online' */
 const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online'>('all')
 
-async function selectOnlineFilter(): Promise<void> {
-  selectedFilter.value = 'online'
-  if (onlineTracks.value.length === 0) {
-    await fetchOnlineTracks()
-  }
-}
-
 /** Search */
 const showSearch = ref(false)
 const searchQuery = ref('')
+
+let searchDebounceTimer: number | undefined
+
+watch(searchQuery, (newQuery) => {
+  if (selectedFilter.value === 'online') {
+    window.clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = window.setTimeout(() => {
+      void searchOnline(newQuery)
+    }, 350)
+  }
+})
+
+async function onSelectGenre(genreId: string): Promise<void> {
+  searchQuery.value = ''
+  await selectGenre(genreId)
+}
+
+async function selectOnlineFilter(): Promise<void> {
+  selectedFilter.value = 'online'
+  if (searchQuery.value.trim()) {
+    await searchOnline(searchQuery.value.trim())
+  } else if (onlineTracks.value.length === 0) {
+    await selectGenre(activeGenreId.value)
+  }
+}
+
+const activeGenreLabel = computed(() => {
+  if (searchQuery.value.trim()) {
+    return `Results for “${searchQuery.value.trim()}”`
+  }
+  const found = onlineGenres.find((g) => g.id === activeGenreId.value)
+  return found ? `Online ${found.label}` : 'Online Music'
+})
 
 /** Liked track IDs stored in localStorage */
 const likedIds = ref<Set<string>>(new Set())
@@ -108,11 +143,13 @@ let noticeTimer: number | undefined
 /* ------------------------------------------------------------------ */
 
 const filteredTracks = computed(() => {
+  if (selectedFilter.value === 'online') {
+    return onlineTracks.value
+  }
+
   let list = tracks.value
 
-  if (selectedFilter.value === 'online') {
-    list = onlineTracks.value
-  } else if (selectedFilter.value === 'liked') {
+  if (selectedFilter.value === 'liked') {
     const allAvailable = [...tracks.value, ...onlineTracks.value]
     list = allAvailable.filter((t) => likedIds.value.has(t.id))
   } else if (selectedFilter.value === 'recent') {
@@ -535,6 +572,27 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <!-- Online Music Genre Filtration Sub-Bar -->
+        <div
+          v-if="selectedFilter === 'online'"
+          class="mb-4 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+        >
+          <button
+            v-for="genre in onlineGenres"
+            :key="genre.id"
+            type="button"
+            class="flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95"
+            :class="
+              activeGenreId === genre.id && !searchQuery.trim()
+                ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
+            "
+            @click="onSelectGenre(genre.id)"
+          >
+            <span>{{ genre.label }}</span>
+          </button>
+        </div>
+
         <!-- Featured / Active Hero Banner -->
         <div
           v-if="currentTrack"
@@ -587,7 +645,7 @@ onBeforeUnmount(() => {
           <div class="mb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-bold text-white">
-                {{ selectedFilter === 'online' ? 'Online Synthwave' : selectedFilter === 'liked' ? 'Liked Songs' : selectedFilter === 'recent' ? 'Recent Tracks' : 'Your library' }}
+                {{ selectedFilter === 'online' ? activeGenreLabel : selectedFilter === 'liked' ? 'Liked Songs' : selectedFilter === 'recent' ? 'Recent Tracks' : 'Your library' }}
               </h2>
               <button
                 v-if="selectedFilter === 'online'"
@@ -599,9 +657,15 @@ onBeforeUnmount(() => {
                 <RefreshCw :size="13" :class="{ 'animate-spin': isLoadingOnline }" />
               </button>
             </div>
-            <span class="text-xs font-medium text-zinc-500">
-              {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
-            </span>
+            <div class="flex items-center gap-2">
+              <span v-if="isLoadingOnline && filteredTracks.length > 0" class="flex items-center gap-1 text-[11px] font-medium text-indigo-400">
+                <span class="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+                <span>Searching...</span>
+              </span>
+              <span class="text-xs font-medium text-zinc-500">
+                {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
+              </span>
+            </div>
           </div>
 
           <!-- Loading state for online music -->
@@ -610,8 +674,10 @@ onBeforeUnmount(() => {
             class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
           >
             <div class="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
-            <p class="text-sm font-medium text-zinc-300">Loading online tracks...</p>
-            <p class="text-xs text-zinc-500">Fetching curated Synthwave from Jamendo</p>
+            <p class="text-sm font-medium text-zinc-300">Searching Jamendo catalog...</p>
+            <p class="text-xs text-zinc-500">
+              {{ searchQuery.trim() ? `Searching for “${searchQuery.trim()}”` : 'Fetching curated music from Jamendo' }}
+            </p>
           </div>
 
           <!-- Error state for online music -->
