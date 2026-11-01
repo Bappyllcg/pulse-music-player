@@ -434,8 +434,10 @@ function parseM3u(content: string, region: TvRegionId): TvChannel[] {
 }
 
 export type ChannelHealthStatus = 'online' | 'offline' | 'checking' | 'unknown'
+export type NetworkStrengthLevel = 'excellent' | 'good' | 'fair' | 'poor' | 'offline' | 'unknown'
 
 const HEALTH_CACHE_KEY = 'pulse:tv_health_cache_v1'
+const LATENCY_CACHE_KEY = 'pulse:tv_latency_cache_v1'
 
 // Reactive state
 const channels = ref<TvChannel[]>([])
@@ -448,6 +450,7 @@ const currentTvSearch = ref('')
 const activePlayingChannel = ref<TvChannel | null>(null)
 
 const channelHealth = ref<Record<string, ChannelHealthStatus>>({})
+const channelLatency = ref<Record<string, number>>({})
 const channelCache = new Map<TvRegionId, TvChannel[]>()
 
 let activeHealthCheckAbortController: AbortController | null = null
@@ -463,6 +466,16 @@ function loadHealthCache(): void {
       }
     }
   } catch {}
+
+  try {
+    const storedLat = sessionStorage.getItem(LATENCY_CACHE_KEY)
+    if (storedLat) {
+      const parsedLat = JSON.parse(storedLat) as Record<string, number>
+      if (parsedLat && typeof parsedLat === 'object') {
+        channelLatency.value = parsedLat
+      }
+    }
+  } catch {}
 }
 loadHealthCache()
 
@@ -472,6 +485,7 @@ function persistHealthCache(): void {
   saveHealthCacheTimer = window.setTimeout(() => {
     try {
       sessionStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify(channelHealth.value))
+      sessionStorage.setItem(LATENCY_CACHE_KEY, JSON.stringify(channelLatency.value))
     } catch {}
   }, 400)
 }
@@ -485,21 +499,54 @@ export function setChannelStatus(channelId: string, status: ChannelHealthStatus)
   persistHealthCache()
 }
 
+export function getChannelLatency(channelId: string): number | undefined {
+  return channelLatency.value[channelId]
+}
+
+export function setChannelLatency(channelId: string, latencyMs: number): void {
+  channelLatency.value[channelId] = latencyMs
+  persistHealthCache()
+}
+
+export function getChannelNetworkStrength(channelId: string): NetworkStrengthLevel {
+  const status = channelHealth.value[channelId]
+  if (status === 'offline') return 'offline'
+
+  const lat = channelLatency.value[channelId]
+  if (lat !== undefined) {
+    if (lat < 350) return 'excellent'
+    if (lat < 700) return 'good'
+    if (lat < 1200) return 'fair'
+    return 'poor'
+  }
+
+  // If online/seeded without direct ping measured yet, indicate strong default
+  if (status === 'online') return 'good'
+  return 'unknown'
+}
+
+export interface HealthCheckResult {
+  status: 'online' | 'offline'
+  latencyMs?: number
+  strength: NetworkStrengthLevel
+}
+
 /**
- * Checks whether an HLS stream is active and responding.
- * Fast 1200ms timeout with byte range request skips broken/dead streams immediately.
+ * Checks whether an HLS stream is active and responding, measuring network latency.
+ * Fast 1400ms timeout with byte range request skips broken/dead streams immediately.
  */
 export async function checkChannelHealth(
   channel: TvChannel,
-  timeoutMs = 1200,
-): Promise<'online' | 'offline'> {
+  timeoutMs = 1400,
+): Promise<HealthCheckResult> {
   const sanitized = sanitizeStreamUrl(channel.url)
   if (!sanitized) {
-    return 'offline'
+    return { status: 'offline', strength: 'offline' }
   }
 
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  const startTime = performance.now()
 
   try {
     const res = await fetch(sanitized, {
@@ -511,14 +558,25 @@ export async function checkChannelHealth(
     })
 
     window.clearTimeout(timeoutId)
+    const latencyMs = Math.round(performance.now() - startTime)
 
-    if (res.ok || res.status === 206 || res.status === 304) {
-      return 'online'
+    if (res.ok || res.status === 206 || res.status === 304 || (res.status >= 300 && res.status < 400)) {
+      let strength: NetworkStrengthLevel = 'excellent'
+      if (latencyMs < 350) strength = 'excellent'
+      else if (latencyMs < 700) strength = 'good'
+      else strength = 'fair'
+
+      return { status: 'online', latencyMs, strength }
     }
-    return 'offline'
+
+    if (res.status === 404 || res.status === 410 || res.status === 403 || res.status >= 500) {
+      return { status: 'offline', strength: 'offline' }
+    }
+
+    return { status: 'online', latencyMs, strength: latencyMs < 500 ? 'good' : 'fair' }
   } catch {
     window.clearTimeout(timeoutId)
-    return 'offline'
+    return { status: 'offline', strength: 'offline' }
   }
 }
 
@@ -562,9 +620,12 @@ export async function runBackgroundHealthCheck(
       const ch = pending[index++]
       if (!ch) break
 
-      const status = await checkChannelHealth(ch, 1200)
+      const result = await checkChannelHealth(ch, 1400)
       if (!signal.aborted) {
-        channelHealth.value[ch.id] = status
+        channelHealth.value[ch.id] = result.status
+        if (result.latencyMs !== undefined) {
+          channelLatency.value[ch.id] = result.latencyMs
+        }
         persistHealthCache()
       }
     }
@@ -778,6 +839,7 @@ export function useLiveTv() {
     currentTvSearch,
     activePlayingChannel,
     channelHealth,
+    channelLatency,
     tvStats,
     regions: TV_REGIONS,
     categories: TV_CATEGORIES,
@@ -789,6 +851,9 @@ export function useLiveTv() {
     playPrevChannel,
     getChannelStatus,
     setChannelStatus,
+    getChannelLatency,
+    setChannelLatency,
+    getChannelNetworkStrength,
     checkChannelHealth,
     runBackgroundHealthCheck,
   }

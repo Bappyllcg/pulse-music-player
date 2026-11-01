@@ -23,6 +23,10 @@ import {
   RotateCw,
   Search,
   Shuffle,
+  SignalHigh,
+  SignalLow,
+  SignalMedium,
+  SignalZero,
   SkipBack,
   SkipForward,
   Tv,
@@ -89,6 +93,8 @@ const {
   playNextChannel: playNextTvChannel,
   playPrevChannel: playPrevTvChannel,
   getChannelStatus: getTvChannelStatus,
+  getChannelLatency: getTvChannelLatency,
+  getChannelNetworkStrength: getTvNetworkStrength,
   runBackgroundHealthCheck,
 } = liveTv
 const {
@@ -933,13 +939,60 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="flex shrink-0 items-center gap-2">
+                <!-- Network Strength Badge -->
+                <div
+                  v-if="getTvChannelStatus(ch.id) !== 'offline'"
+                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 transition"
+                  :class="
+                    getTvNetworkStrength(ch.id) === 'excellent'
+                      ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/25'
+                      : getTvNetworkStrength(ch.id) === 'good'
+                        ? 'bg-teal-500/10 text-teal-400 ring-teal-500/25'
+                        : getTvNetworkStrength(ch.id) === 'fair'
+                          ? 'bg-amber-500/10 text-amber-400 ring-amber-500/25'
+                          : 'bg-zinc-800/80 text-zinc-400 ring-white/10'
+                  "
+                  :title="
+                    getTvChannelLatency(ch.id)
+                      ? `Network Ping: ${getTvChannelLatency(ch.id)}ms (${getTvNetworkStrength(ch.id)})`
+                      : 'Stream Signal: Good'
+                  "
+                >
+                  <SignalHigh
+                    v-if="getTvNetworkStrength(ch.id) === 'excellent'"
+                    :size="12"
+                    class="text-emerald-400"
+                  />
+                  <SignalMedium
+                    v-else-if="getTvNetworkStrength(ch.id) === 'good'"
+                    :size="12"
+                    class="text-teal-400"
+                  />
+                  <SignalLow
+                    v-else-if="getTvNetworkStrength(ch.id) === 'fair' || getTvNetworkStrength(ch.id) === 'poor'"
+                    :size="12"
+                    class="text-amber-400"
+                  />
+                  <SignalZero
+                    v-else
+                    :size="12"
+                    class="text-zinc-500"
+                  />
+                  <span
+                    v-if="getTvChannelLatency(ch.id)"
+                    class="font-mono text-[9px] font-semibold text-zinc-300"
+                  >
+                    {{ getTvChannelLatency(ch.id) }}ms
+                  </span>
+                </div>
+
                 <!-- Status Badge -->
                 <span
                   v-if="getTvChannelStatus(ch.id) === 'offline'"
                   class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800/90 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-400 ring-1 ring-amber-500/20"
                 >
-                  <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
-                  OFFLINE
+                  <SignalZero :size="11" class="text-amber-500/70" />
+                  <span>OFFLINE</span>
                 </span>
 
                 <span
