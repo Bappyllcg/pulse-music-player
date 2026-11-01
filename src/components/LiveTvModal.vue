@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import {
   ChevronLeft,
@@ -11,12 +11,17 @@ import {
   Tv,
   X,
 } from 'lucide-vue-next'
-import type { TvChannel } from '../composables/useLiveTv'
+import { TV_REGIONS, type TvChannel } from '../composables/useLiveTv'
 
 const props = defineProps<{
   channel: TvChannel | null
   channels: TvChannel[]
 }>()
+
+const countryInfo = computed(() => {
+  const reg = TV_REGIONS.find((r) => r.id === props.channel?.country)
+  return reg ? `${reg.flag} ${reg.label}` : 'Live TV'
+})
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -205,7 +210,7 @@ onBeforeUnmount(() => {
             </span>
           </div>
           <p class="truncate text-xs text-zinc-400">
-            {{ channel.country === 'bd' ? '🇧🇩 Bangladesh' : channel.country === 'in' ? '🇮🇳 India' : channel.country === 'pk' ? '🇵🇰 Pakistan' : '🌍 World' }}
+            {{ countryInfo }}
             <span v-if="channel.group" class="text-zinc-500"> • {{ channel.group }}</span>
           </p>
         </div>

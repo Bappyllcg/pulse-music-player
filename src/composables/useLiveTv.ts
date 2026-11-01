@@ -1,6 +1,28 @@
 import { computed, ref } from 'vue'
 
-export type TvRegionId = 'bd' | 'in' | 'pk' | 'global'
+export type TvRegionId =
+  | 'bd'
+  | 'in'
+  | 'pk'
+  | 'us'
+  | 'uk'
+  | 'sa'
+  | 'ae'
+  | 'qa'
+  | 'ca'
+  | 'au'
+  | 'tr'
+  | 'de'
+  | 'fr'
+  | 'es'
+  | 'it'
+  | 'jp'
+  | 'kr'
+  | 'my'
+  | 'id'
+  | 'sg'
+  | 'br'
+  | 'global'
 
 export interface TvRegion {
   id: TvRegionId
@@ -10,10 +32,32 @@ export interface TvRegion {
 }
 
 export const TV_REGIONS: TvRegion[] = [
+  // 1st Priority
   { id: 'bd', label: 'Bangladesh', flag: '🇧🇩', url: 'https://iptv-org.github.io/iptv/countries/bd.m3u' },
+  // 2nd Priority
   { id: 'in', label: 'India', flag: '🇮🇳', url: 'https://iptv-org.github.io/iptv/countries/in.m3u' },
+  // 3rd Priority
   { id: 'pk', label: 'Pakistan', flag: '🇵🇰', url: 'https://iptv-org.github.io/iptv/countries/pk.m3u' },
-  { id: 'global', label: 'Global News', flag: '🌍', url: 'https://iptv-org.github.io/iptv/categories/news.m3u' },
+  // Top Global Countries
+  { id: 'us', label: 'United States', flag: '🇺🇸', url: 'https://iptv-org.github.io/iptv/countries/us.m3u' },
+  { id: 'uk', label: 'United Kingdom', flag: '🇬🇧', url: 'https://iptv-org.github.io/iptv/countries/uk.m3u' },
+  { id: 'sa', label: 'Saudi Arabia', flag: '🇸🇦', url: 'https://iptv-org.github.io/iptv/countries/sa.m3u' },
+  { id: 'ae', label: 'UAE', flag: '🇦🇪', url: 'https://iptv-org.github.io/iptv/countries/ae.m3u' },
+  { id: 'qa', label: 'Qatar', flag: '🇶🇦', url: 'https://iptv-org.github.io/iptv/countries/qa.m3u' },
+  { id: 'ca', label: 'Canada', flag: '🇨🇦', url: 'https://iptv-org.github.io/iptv/countries/ca.m3u' },
+  { id: 'au', label: 'Australia', flag: '🇦🇺', url: 'https://iptv-org.github.io/iptv/countries/au.m3u' },
+  { id: 'tr', label: 'Turkey', flag: '🇹🇷', url: 'https://iptv-org.github.io/iptv/countries/tr.m3u' },
+  { id: 'de', label: 'Germany', flag: '🇩🇪', url: 'https://iptv-org.github.io/iptv/countries/de.m3u' },
+  { id: 'fr', label: 'France', flag: '🇫🇷', url: 'https://iptv-org.github.io/iptv/countries/fr.m3u' },
+  { id: 'es', label: 'Spain', flag: '🇪🇸', url: 'https://iptv-org.github.io/iptv/countries/es.m3u' },
+  { id: 'it', label: 'Italy', flag: '🇮🇹', url: 'https://iptv-org.github.io/iptv/countries/it.m3u' },
+  { id: 'jp', label: 'Japan', flag: '🇯🇵', url: 'https://iptv-org.github.io/iptv/countries/jp.m3u' },
+  { id: 'kr', label: 'South Korea', flag: '🇰🇷', url: 'https://iptv-org.github.io/iptv/countries/kr.m3u' },
+  { id: 'my', label: 'Malaysia', flag: '🇲🇾', url: 'https://iptv-org.github.io/iptv/countries/my.m3u' },
+  { id: 'id', label: 'Indonesia', flag: '🇮🇩', url: 'https://iptv-org.github.io/iptv/countries/id.m3u' },
+  { id: 'sg', label: 'Singapore', flag: '🇸🇬', url: 'https://iptv-org.github.io/iptv/countries/sg.m3u' },
+  { id: 'br', label: 'Brazil', flag: '🇧🇷', url: 'https://iptv-org.github.io/iptv/countries/br.m3u' },
+  { id: 'global', label: 'World News', flag: '🌍', url: 'https://iptv-org.github.io/iptv/categories/news.m3u' },
 ]
 
 export type TvCategoryId =
@@ -416,3 +460,4 @@ export function useLiveTv() {
     playPrevChannel,
   }
 }
+
