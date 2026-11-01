@@ -683,14 +683,9 @@ onBeforeUnmount(() => {
               <AudioLines :size="22" class="text-white" />
             </div>
             <div>
-              <div class="flex items-center gap-1.5">
-                <h1 class="text-xl font-bold tracking-tight text-white">Pulse</h1>
-                <span class="rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-400 ring-1 ring-indigo-500/30">
-                  OFFLINE
-                </span>
-              </div>
+              <h1 class="text-xl font-bold tracking-tight text-white">Pulse</h1>
               <p class="text-xs text-zinc-400">
-                {{ localCount }} {{ localCount === 1 ? 'track' : 'tracks' }} offline
+                {{ localCount }} {{ localCount === 1 ? 'track' : 'tracks' }}
               </p>
             </div>
           </div>
