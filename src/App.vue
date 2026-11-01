@@ -75,11 +75,13 @@ const {
   channels: tvChannels,
   filteredChannels: filteredTvChannels,
   isLoadingTv,
+  isCheckingHealth,
   tvError,
   activeRegion: activeTvRegion,
   activeCategory: activeTvCategory,
   currentTvSearch,
   activePlayingChannel,
+  tvStats,
   regions: tvRegions,
   categories: tvCategories,
   selectRegion: selectTvRegion,
@@ -88,6 +90,8 @@ const {
   closePlayer: closeTvPlayer,
   playNextChannel: playNextTvChannel,
   playPrevChannel: playPrevTvChannel,
+  getChannelStatus: getTvChannelStatus,
+  runBackgroundHealthCheck,
 } = liveTv
 const {
   currentTrack,
@@ -159,8 +163,16 @@ async function selectTvFilter(): Promise<void> {
   selectedFilter.value = 'tv'
   if (tvChannels.value.length === 0) {
     await selectTvRegion('bd')
+  } else {
+    void runBackgroundHealthCheck(filteredTvChannels.value)
   }
 }
+
+watch([activeTvRegion, activeTvCategory], () => {
+  if (selectedFilter.value === 'tv' && filteredTvChannels.value.length > 0) {
+    void runBackgroundHealthCheck(filteredTvChannels.value)
+  }
+})
 
 async function onSelectTvRegion(regionId: TvRegionId): Promise<void> {
   searchQuery.value = ''
@@ -820,7 +832,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex items-center gap-2">
               <span
-                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio) || (selectedFilter === 'tv' && isLoadingTv)) && (selectedFilter === 'tv' ? filteredTvChannels.length > 0 : filteredTracks.length > 0)"
+                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio) || (selectedFilter === 'tv' && (isLoadingTv || isCheckingHealth))) && (selectedFilter === 'tv' ? filteredTvChannels.length > 0 : filteredTracks.length > 0)"
                 class="flex items-center gap-1 text-[11px] font-medium"
                 :class="selectedFilter === 'tv' ? 'text-amber-400' : selectedFilter === 'radio' ? 'text-rose-400' : 'text-indigo-400'"
               >
@@ -828,14 +840,22 @@ onBeforeUnmount(() => {
                   class="h-1.5 w-1.5 rounded-full animate-ping"
                   :class="selectedFilter === 'tv' ? 'bg-amber-400' : selectedFilter === 'radio' ? 'bg-rose-400' : 'bg-indigo-400'"
                 ></span>
-                <span>{{ selectedFilter === 'tv' ? 'Updating...' : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
+                <span>{{ selectedFilter === 'tv' ? (isLoadingTv ? 'Updating...' : 'Checking streams...') : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
               </span>
               <span class="text-xs font-medium text-zinc-500">
-                {{
-                  selectedFilter === 'tv'
-                    ? `${filteredTvChannels.length} ${filteredTvChannels.length === 1 ? 'channel' : 'channels'}`
-                    : `${filteredTracks.length} ${filteredTracks.length === 1 ? (selectedFilter === 'radio' ? 'station' : selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'radio' ? 'stations' : selectedFilter === 'online' ? 'tracks' : 'songs')}`
-                }}
+                <template v-if="selectedFilter === 'tv'">
+                  <span>{{ filteredTvChannels.length }} channels</span>
+                  <template v-if="tvStats.totalChecked > 0">
+                    <span class="mx-1 text-zinc-600">•</span>
+                    <span class="text-emerald-400 font-semibold">{{ tvStats.onlineCount }} live</span>
+                    <span v-if="tvStats.offlineCount > 0" class="text-zinc-500"> ({{ tvStats.offlineCount }} offline)</span>
+                  </template>
+                </template>
+                <template v-else>
+                  {{
+                    `${filteredTracks.length} ${filteredTracks.length === 1 ? (selectedFilter === 'radio' ? 'station' : selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'radio' ? 'stations' : selectedFilter === 'online' ? 'tracks' : 'songs')}`
+                  }}
+                </template>
               </span>
             </div>
           </div>
@@ -881,7 +901,12 @@ onBeforeUnmount(() => {
             <div
               v-for="ch in filteredTvChannels"
               :key="ch.id"
-              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 ring-white/[0.06] transition active:scale-[0.99] active:bg-zinc-800/80 cursor-pointer hover:bg-zinc-800/60"
+              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 transition active:scale-[0.99] cursor-pointer hover:bg-zinc-800/60"
+              :class="
+                getTvChannelStatus(ch.id) === 'offline'
+                  ? 'ring-white/[0.03] opacity-75 hover:opacity-100 hover:ring-white/[0.08]'
+                  : 'ring-white/[0.06] active:bg-zinc-800/80'
+              "
               @click="onPlayTvChannel(ch)"
             >
               <div class="flex min-w-0 flex-1 items-center gap-3 pr-2">
@@ -898,7 +923,14 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-1.5">
-                    <p class="truncate text-sm font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors">
+                    <p
+                      class="truncate text-sm font-semibold transition-colors"
+                      :class="
+                        getTvChannelStatus(ch.id) === 'offline'
+                          ? 'text-zinc-400 group-hover:text-zinc-200'
+                          : 'text-zinc-100 group-hover:text-amber-300'
+                      "
+                    >
                       {{ ch.cleanName }}
                     </p>
                     <span
@@ -913,11 +945,42 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="flex shrink-0 items-center gap-2">
-                <span class="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20">
+                <!-- Status Badge -->
+                <!-- Online / Live -->
+                <span
+                  v-if="getTvChannelStatus(ch.id) === 'online' || getTvChannelStatus(ch.id) === 'unknown'"
+                  class="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20"
+                >
                   <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
                   LIVE
                 </span>
-                <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white">
+
+                <!-- Checking in background -->
+                <span
+                  v-else-if="getTvChannelStatus(ch.id) === 'checking'"
+                  class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-400 ring-1 ring-amber-500/20"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                  CHECKING
+                </span>
+
+                <!-- Offline -->
+                <span
+                  v-else-if="getTvChannelStatus(ch.id) === 'offline'"
+                  class="inline-flex items-center gap-1 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-zinc-400 ring-1 ring-white/10"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+                  OFFLINE
+                </span>
+
+                <div
+                  class="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition"
+                  :class="
+                    getTvChannelStatus(ch.id) === 'offline'
+                      ? 'bg-zinc-800/60 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-white'
+                      : 'bg-white/[0.08] text-white group-hover:bg-rose-600 group-hover:text-white'
+                  "
+                >
                   <Play :size="14" fill="currentColor" class="translate-x-0.5" />
                 </div>
               </div>

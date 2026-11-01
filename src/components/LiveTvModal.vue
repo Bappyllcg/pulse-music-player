@@ -11,12 +11,19 @@ import {
   Tv,
   X,
 } from 'lucide-vue-next'
-import { TV_REGIONS, sanitizeStreamUrl, type TvChannel } from '../composables/useLiveTv'
+import {
+  TV_REGIONS,
+  sanitizeStreamUrl,
+  useLiveTv,
+  type TvChannel,
+} from '../composables/useLiveTv'
 
 const props = defineProps<{
   channel: TvChannel | null
   channels: TvChannel[]
 }>()
+
+const { getChannelStatus, setChannelStatus } = useLiveTv()
 
 const countryInfo = computed(() => {
   const reg = TV_REGIONS.find((r) => r.id === props.channel?.country)
@@ -57,6 +64,7 @@ function loadChannelStream(channel: TvChannel): void {
   const streamUrl = sanitizeStreamUrl(channel.url)
   if (!streamUrl) {
     isBuffering.value = false
+    setChannelStatus(channel.id, 'offline')
     streamError.value =
       'This stream uses unencrypted HTTP (raw IP) and cannot be loaded over HTTPS due to browser security restrictions. Tap Next Channel to continue.'
     return
@@ -88,6 +96,7 @@ function loadChannelStream(channel: TvChannel): void {
               hlsInstance?.startLoad()
             } else {
               cleanUpHls()
+              setChannelStatus(channel.id, 'offline')
               streamError.value =
                 'Stream connection failed. This channel may be temporarily offline or restricted by CORS.'
               isBuffering.value = false
@@ -98,6 +107,7 @@ function loadChannelStream(channel: TvChannel): void {
             break
           default:
             cleanUpHls()
+            setChannelStatus(channel.id, 'offline')
             streamError.value = 'Stream connection lost. This channel may be temporarily offline.'
             isBuffering.value = false
             break
@@ -116,12 +126,21 @@ function loadChannelStream(channel: TvChannel): void {
       { once: true },
     )
     video.addEventListener('error', () => {
+      setChannelStatus(channel.id, 'offline')
       streamError.value = 'Unable to stream this channel. Format or CORS error.'
       isBuffering.value = false
     })
   } else {
     streamError.value = 'HLS streaming is not supported on this browser.'
     isBuffering.value = false
+  }
+}
+
+function onVideoPlaying(): void {
+  isBuffering.value = false
+  streamError.value = null
+  if (props.channel) {
+    setChannelStatus(props.channel.id, 'online')
   }
 }
 
@@ -220,7 +239,18 @@ onBeforeUnmount(() => {
             >
               {{ channel.resolution }}
             </span>
-            <span class="inline-flex items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30">
+            <!-- Status Badge -->
+            <span
+              v-if="getChannelStatus(channel.id) === 'offline'"
+              class="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-bold text-zinc-400 ring-1 ring-white/10"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+              OFFLINE
+            </span>
+            <span
+              v-else
+              class="inline-flex items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
+            >
               <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
               LIVE
             </span>
@@ -276,7 +306,7 @@ onBeforeUnmount(() => {
         playsinline
         controls
         @waiting="isBuffering = true"
-        @playing="isBuffering = false; streamError = null"
+        @playing="onVideoPlaying"
       ></video>
 
       <!-- Buffering Spinner Overlay -->
@@ -372,7 +402,13 @@ onBeforeUnmount(() => {
           />
           <span class="truncate max-w-[120px]">{{ ch.cleanName }}</span>
           <span
-            v-if="ch.resolution"
+            v-if="getChannelStatus(ch.id) === 'offline'"
+            class="rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold text-zinc-400 ring-1 ring-white/10"
+          >
+            Offline
+          </span>
+          <span
+            v-else-if="ch.resolution"
             class="rounded bg-black/40 px-1 py-0.2 text-[8px] font-bold"
           >
             {{ ch.resolution }}

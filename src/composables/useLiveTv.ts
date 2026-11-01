@@ -433,16 +433,154 @@ function parseM3u(content: string, region: TvRegionId): TvChannel[] {
   return channels
 }
 
+export type ChannelHealthStatus = 'online' | 'offline' | 'checking' | 'unknown'
+
+const HEALTH_CACHE_KEY = 'pulse:tv_health_cache_v1'
+
 // Reactive state
 const channels = ref<TvChannel[]>([])
 const isLoadingTv = ref(false)
+const isCheckingHealth = ref(false)
 const tvError = ref<string | null>(null)
 const activeRegion = ref<TvRegionId>('bd')
 const activeCategory = ref<TvCategoryId>('all')
 const currentTvSearch = ref('')
 const activePlayingChannel = ref<TvChannel | null>(null)
 
+const channelHealth = ref<Record<string, ChannelHealthStatus>>({})
 const channelCache = new Map<TvRegionId, TvChannel[]>()
+
+let activeHealthCheckAbortController: AbortController | null = null
+let saveHealthCacheTimer: number | undefined
+
+function loadHealthCache(): void {
+  try {
+    const stored = sessionStorage.getItem(HEALTH_CACHE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored) as Record<string, ChannelHealthStatus>
+      if (parsed && typeof parsed === 'object') {
+        channelHealth.value = parsed
+      }
+    }
+  } catch {}
+}
+loadHealthCache()
+
+function persistHealthCache(): void {
+  if (typeof window === 'undefined') return
+  window.clearTimeout(saveHealthCacheTimer)
+  saveHealthCacheTimer = window.setTimeout(() => {
+    try {
+      sessionStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify(channelHealth.value))
+    } catch {}
+  }, 400)
+}
+
+export function getChannelStatus(channelId: string): ChannelHealthStatus {
+  return channelHealth.value[channelId] || 'unknown'
+}
+
+export function setChannelStatus(channelId: string, status: ChannelHealthStatus): void {
+  channelHealth.value[channelId] = status
+  persistHealthCache()
+}
+
+/**
+ * Checks whether an HLS stream is active and responding.
+ * Uses a lightweight GET with Range: bytes=0-100 to avoid consuming video bandwidth.
+ */
+export async function checkChannelHealth(
+  channel: TvChannel,
+  timeoutMs = 3500,
+): Promise<'online' | 'offline'> {
+  const sanitized = sanitizeStreamUrl(channel.url)
+  if (!sanitized) {
+    return 'offline'
+  }
+
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const res = await fetch(sanitized, {
+      method: 'GET',
+      headers: {
+        Range: 'bytes=0-100',
+      },
+      signal: controller.signal,
+    })
+
+    window.clearTimeout(timeoutId)
+
+    if (res.ok || res.status === 206 || res.status === 304) {
+      return 'online'
+    }
+    return 'offline'
+  } catch {
+    window.clearTimeout(timeoutId)
+    return 'offline'
+  }
+}
+
+/**
+ * Runs a background health check over target channels with a concurrency pool.
+ */
+export async function runBackgroundHealthCheck(
+  targetChannels: TvChannel[],
+  concurrency = 4,
+): Promise<void> {
+  if (!targetChannels || targetChannels.length === 0) return
+
+  if (activeHealthCheckAbortController) {
+    activeHealthCheckAbortController.abort()
+  }
+
+  const controller = new AbortController()
+  activeHealthCheckAbortController = controller
+  const { signal } = controller
+
+  // Find channels that haven't been validated yet in this session
+  const pending = targetChannels.filter((ch) => {
+    const status = channelHealth.value[ch.id]
+    return !status || status === 'unknown'
+  })
+
+  if (pending.length === 0) {
+    return
+  }
+
+  isCheckingHealth.value = true
+
+  for (const ch of pending) {
+    channelHealth.value[ch.id] = 'checking'
+  }
+
+  let index = 0
+
+  async function worker(): Promise<void> {
+    while (index < pending.length) {
+      if (signal.aborted) break
+      const ch = pending[index++]
+      if (!ch) break
+
+      const status = await checkChannelHealth(ch)
+      if (!signal.aborted) {
+        channelHealth.value[ch.id] = status
+        persistHealthCache()
+      }
+    }
+  }
+
+  const workerCount = Math.min(concurrency, pending.length)
+  const workers = Array.from({ length: workerCount }, () => worker())
+
+  await Promise.allSettled(workers)
+
+  if (activeHealthCheckAbortController === controller) {
+    isCheckingHealth.value = false
+    activeHealthCheckAbortController = null
+  }
+}
 
 export function useLiveTv() {
   const filteredChannels = computed(() => {
@@ -467,16 +605,48 @@ export function useLiveTv() {
     return list
   })
 
+  const tvStats = computed(() => {
+    const list = filteredChannels.value
+    let onlineCount = 0
+    let offlineCount = 0
+    let checkingCount = 0
+
+    for (const ch of list) {
+      const s = channelHealth.value[ch.id]
+      if (s === 'online') onlineCount++
+      else if (s === 'offline') offlineCount++
+      else if (s === 'checking') checkingCount++
+    }
+
+    return {
+      total: list.length,
+      onlineCount,
+      offlineCount,
+      checkingCount,
+      totalChecked: onlineCount + offlineCount,
+    }
+  })
+
   async function selectRegion(regionId: TvRegionId, force = false): Promise<TvChannel[]> {
     activeRegion.value = regionId
     activeCategory.value = 'all'
     currentTvSearch.value = ''
+
+    if (force) {
+      for (const key of Object.keys(channelHealth.value)) {
+        if (key.startsWith(`tv-${regionId}-`)) {
+          delete channelHealth.value[key]
+        }
+      }
+      persistHealthCache()
+    }
 
     // Return from in-memory cache
     if (!force && channelCache.has(regionId)) {
       const cached = channelCache.get(regionId)!
       channels.value = cached
       tvError.value = null
+      void runBackgroundHealthCheck(cached)
       return cached
     }
 
@@ -499,6 +669,7 @@ export function useLiveTv() {
               channelCache.set(regionId, sanitizedCached)
               channels.value = sanitizedCached
               tvError.value = null
+              void runBackgroundHealthCheck(sanitizedCached)
               return sanitizedCached
             }
           }
@@ -509,6 +680,7 @@ export function useLiveTv() {
     // Pre-seed with default Bangladeshi channels for instant offline display
     if (regionId === 'bd' && channels.value.length === 0) {
       channels.value = SEED_BD_CHANNELS
+      void runBackgroundHealthCheck(SEED_BD_CHANNELS)
     }
 
     const region = TV_REGIONS.find((r) => r.id === regionId) ?? TV_REGIONS[0]
@@ -532,6 +704,7 @@ export function useLiveTv() {
       if (parsed.length > 0) {
         channels.value = parsed
         channelCache.set(regionId, parsed)
+        void runBackgroundHealthCheck(parsed)
         try {
           localStorage.setItem(`${CACHE_PREFIX}${regionId}`, JSON.stringify(parsed))
         } catch {}
@@ -583,11 +756,14 @@ export function useLiveTv() {
     channels,
     filteredChannels,
     isLoadingTv,
+    isCheckingHealth,
     tvError,
     activeRegion,
     activeCategory,
     currentTvSearch,
     activePlayingChannel,
+    channelHealth,
+    tvStats,
     regions: TV_REGIONS,
     categories: TV_CATEGORIES,
     selectRegion,
@@ -596,6 +772,10 @@ export function useLiveTv() {
     closePlayer,
     playNextChannel,
     playPrevChannel,
+    getChannelStatus,
+    setChannelStatus,
+    checkChannelHealth,
+    runBackgroundHealthCheck,
   }
 }
 
