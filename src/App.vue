@@ -15,6 +15,7 @@ import {
   Pause,
   Play,
   Plus,
+  Radio,
   RefreshCw,
   Repeat,
   Repeat1,
@@ -31,6 +32,7 @@ import WaveformScrubber from './components/WaveformScrubber.vue'
 import { useAudioStorage } from './composables/useAudioStorage'
 import { useOnlineMusic } from './composables/useOnlineMusic'
 import { usePlayer } from './composables/usePlayer'
+import { useRadio } from './composables/useRadio'
 import { SLEEP_MINUTE_OPTIONS, useSleepTimer } from './composables/useSleepTimer'
 
 /* ------------------------------------------------------------------ */
@@ -41,6 +43,7 @@ const storage = useAudioStorage()
 const player = usePlayer()
 const sleep = useSleepTimer()
 const onlineMusic = useOnlineMusic()
+const radio = useRadio()
 
 const { tracks, localCount, isImporting } = storage
 const {
@@ -54,6 +57,16 @@ const {
   fetchOnlineTracks,
 } = onlineMusic
 const {
+  radioStations,
+  isLoadingRadio,
+  radioError,
+  activeRadioCategoryId,
+  categories: radioCategories,
+  selectRadioCategory,
+  searchRadio,
+  fetchRadioStations,
+} = radio
+const {
   currentTrack,
   isPlaying,
   currentTime,
@@ -66,8 +79,8 @@ const {
 /** Active main view: 'library' | 'player' */
 const activeTab = ref<'library' | 'player'>('library')
 
-/** Filter tabs in library: 'all' | 'liked' | 'recent' | 'online' */
-const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online'>('all')
+/** Filter tabs in library: 'all' | 'liked' | 'recent' | 'online' | 'radio' */
+const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online' | 'radio'>('all')
 
 /** Search */
 const showSearch = ref(false)
@@ -81,12 +94,22 @@ watch(searchQuery, (newQuery) => {
     searchDebounceTimer = window.setTimeout(() => {
       void searchOnline(newQuery)
     }, 350)
+  } else if (selectedFilter.value === 'radio') {
+    window.clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = window.setTimeout(() => {
+      void searchRadio(newQuery)
+    }, 350)
   }
 })
 
 async function onSelectGenre(genreId: string): Promise<void> {
   searchQuery.value = ''
   await selectGenre(genreId)
+}
+
+async function onSelectRadioCategory(categoryId: string): Promise<void> {
+  searchQuery.value = ''
+  await selectRadioCategory(categoryId)
 }
 
 async function selectOnlineFilter(): Promise<void> {
@@ -98,12 +121,29 @@ async function selectOnlineFilter(): Promise<void> {
   }
 }
 
+async function selectRadioFilter(): Promise<void> {
+  selectedFilter.value = 'radio'
+  if (searchQuery.value.trim()) {
+    await searchRadio(searchQuery.value.trim())
+  } else if (radioStations.value.length === 0) {
+    await selectRadioCategory(activeRadioCategoryId.value)
+  }
+}
+
 const activeGenreLabel = computed(() => {
   if (searchQuery.value.trim()) {
     return `Results for “${searchQuery.value.trim()}”`
   }
   const found = onlineGenres.find((g) => g.id === activeGenreId.value)
   return found ? `Online ${found.label}` : 'Online Music'
+})
+
+const activeRadioLabel = computed(() => {
+  if (searchQuery.value.trim()) {
+    return `Radio: “${searchQuery.value.trim()}”`
+  }
+  const found = radioCategories.find((c) => c.id === activeRadioCategoryId.value)
+  return found ? `${found.label} Radio` : 'Live Radio'
 })
 
 /** Liked track IDs stored in localStorage */
@@ -145,11 +185,14 @@ const filteredTracks = computed(() => {
   if (selectedFilter.value === 'online') {
     return onlineTracks.value
   }
+  if (selectedFilter.value === 'radio') {
+    return radioStations.value
+  }
 
   let list = tracks.value
 
   if (selectedFilter.value === 'liked') {
-    const allAvailable = [...tracks.value, ...onlineTracks.value]
+    const allAvailable = [...tracks.value, ...onlineTracks.value, ...radioStations.value]
     list = allAvailable.filter((t) => likedIds.value.has(t.id))
   } else if (selectedFilter.value === 'recent') {
     list = [...tracks.value].sort((a, b) => b.createdAt - a.createdAt)
@@ -569,6 +612,19 @@ onBeforeUnmount(() => {
             <Globe :size="13" />
             <span>Online Music</span>
           </button>
+          <button
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            :class="
+              selectedFilter === 'radio'
+                ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+            "
+            @click="selectRadioFilter"
+          >
+            <Radio :size="13" />
+            <span>Live Radio</span>
+          </button>
         </div>
 
         <!-- Online Music Genre Filtration Sub-Bar -->
@@ -592,57 +648,109 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <!-- Live Radio Category Filtration Sub-Bar -->
+        <div
+          v-if="selectedFilter === 'radio'"
+          class="mb-5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+        >
+          <button
+            v-for="cat in radioCategories"
+            :key="cat.id"
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95"
+            :class="
+              activeRadioCategoryId === cat.id && !searchQuery.trim()
+                ? 'bg-gradient-to-r from-rose-500 to-rose-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
+            "
+            @click="onSelectRadioCategory(cat.id)"
+          >
+            <span>{{ cat.label }}</span>
+          </button>
+        </div>
+
         <!-- Track List -->
         <section aria-label="Track list">
           <div class="mb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-bold text-white">
-                {{ selectedFilter === 'online' ? activeGenreLabel : selectedFilter === 'liked' ? 'Liked' : selectedFilter === 'recent' ? 'Recent Tracks' : 'Your library' }}
+                {{
+                  selectedFilter === 'online'
+                    ? activeGenreLabel
+                    : selectedFilter === 'radio'
+                      ? activeRadioLabel
+                      : selectedFilter === 'liked'
+                        ? 'Liked'
+                        : selectedFilter === 'recent'
+                          ? 'Recent Tracks'
+                          : 'Your library'
+                }}
               </h2>
               <button
-                v-if="selectedFilter === 'online'"
+                v-if="selectedFilter === 'online' || selectedFilter === 'radio'"
                 type="button"
                 class="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition hover:text-white hover:bg-zinc-800"
-                title="Refresh online tracks"
-                @click="fetchOnlineTracks(true)"
+                :title="selectedFilter === 'radio' ? 'Refresh radio stations' : 'Refresh online tracks'"
+                @click="selectedFilter === 'radio' ? fetchRadioStations(true) : fetchOnlineTracks(true)"
               >
-                <RefreshCw :size="13" :class="{ 'animate-spin': isLoadingOnline }" />
+                <RefreshCw
+                  :size="13"
+                  :class="{ 'animate-spin': selectedFilter === 'radio' ? isLoadingRadio : isLoadingOnline }"
+                />
               </button>
             </div>
             <div class="flex items-center gap-2">
-              <span v-if="isLoadingOnline && filteredTracks.length > 0" class="flex items-center gap-1 text-[11px] font-medium text-indigo-400">
-                <span class="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping"></span>
-                <span>Searching...</span>
+              <span
+                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio)) && filteredTracks.length > 0"
+                class="flex items-center gap-1 text-[11px] font-medium"
+                :class="selectedFilter === 'radio' ? 'text-rose-400' : 'text-indigo-400'"
+              >
+                <span
+                  class="h-1.5 w-1.5 rounded-full animate-ping"
+                  :class="selectedFilter === 'radio' ? 'bg-rose-400' : 'bg-indigo-400'"
+                ></span>
+                <span>{{ selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
               </span>
               <span class="text-xs font-medium text-zinc-500">
-                {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
+                {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'radio' ? 'station' : selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'radio' ? 'stations' : selectedFilter === 'online' ? 'tracks' : 'songs') }}
               </span>
             </div>
           </div>
 
-          <!-- Loading state for online music -->
+          <!-- Loading state for online / radio -->
           <div
-            v-if="isLoadingOnline && filteredTracks.length === 0"
+            v-if="((isLoadingOnline && selectedFilter === 'online') || (isLoadingRadio && selectedFilter === 'radio')) && filteredTracks.length === 0"
             class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
           >
-            <div class="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
-            <p class="text-sm font-medium text-zinc-300">Searching Jamendo catalog...</p>
+            <div
+              class="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+              :class="selectedFilter === 'radio' ? 'border-rose-500' : 'border-indigo-500'"
+            ></div>
+            <p class="text-sm font-medium text-zinc-300">
+              {{ selectedFilter === 'radio' ? 'Tuning into live radio stream...' : 'Searching Jamendo catalog...' }}
+            </p>
             <p class="text-xs text-zinc-500">
-              {{ searchQuery.trim() ? `Searching for “${searchQuery.trim()}”` : 'Fetching curated music from Jamendo' }}
+              {{
+                selectedFilter === 'radio'
+                  ? (searchQuery.trim() ? `Searching radio directory for “${searchQuery.trim()}”` : `Loading ${activeRadioLabel}...`)
+                  : (searchQuery.trim() ? `Searching for “${searchQuery.trim()}”` : 'Fetching curated music from Jamendo')
+              }}
             </p>
           </div>
 
-          <!-- Error state for online music -->
+          <!-- Error state for online / radio -->
           <div
-            v-else-if="onlineError && filteredTracks.length === 0"
+            v-else-if="((selectedFilter === 'online' && onlineError) || (selectedFilter === 'radio' && radioError)) && filteredTracks.length === 0"
             class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
           >
-            <Globe :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">{{ onlineError }}</p>
+            <Radio v-if="selectedFilter === 'radio'" :size="32" class="text-zinc-600" />
+            <Globe v-else :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">{{ selectedFilter === 'radio' ? radioError : onlineError }}</p>
             <button
               type="button"
-              class="mt-1 rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-indigo-500"
-              @click="fetchOnlineTracks(true)"
+              class="mt-1 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95"
+              :class="selectedFilter === 'radio' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-indigo-600 hover:bg-indigo-500'"
+              @click="selectedFilter === 'radio' ? fetchRadioStations(true) : fetchOnlineTracks(true)"
             >
               Retry
             </button>
@@ -696,7 +804,13 @@ onBeforeUnmount(() => {
                       {{ track.title }}
                     </p>
                     <span
-                      v-if="track.kind === 'stream'"
+                      v-if="track.id.startsWith('radio-')"
+                      class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
+                    >
+                      RADIO
+                    </span>
+                    <span
+                      v-else-if="track.kind === 'stream'"
                       class="shrink-0 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400 ring-1 ring-indigo-500/30"
                     >
                       ONLINE
@@ -708,7 +822,14 @@ onBeforeUnmount(() => {
 
               <!-- Actions: Duration + Favorite + Circular Play + Delete -->
               <div class="flex shrink-0 items-center gap-2">
-                <span class="text-xs tabular-nums text-zinc-500">
+                <span
+                  v-if="track.id.startsWith('radio-')"
+                  class="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                  LIVE
+                </span>
+                <span v-else class="text-xs tabular-nums text-zinc-500">
                   {{ formatTrackDuration(track.duration) }}
                 </span>
 

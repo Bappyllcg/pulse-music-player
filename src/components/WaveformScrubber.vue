@@ -149,8 +149,13 @@ function handleKeySeek(target: number): void {
 
     <!-- Timestamps below waveform -->
     <div class="mt-1 flex items-center justify-between text-xs font-medium tabular-nums text-zinc-400">
-      <span>{{ formatTime(displayTime) }}</span>
-      <span>{{ formatTime(duration) }}</span>
+      <span class="flex items-center gap-1.5">
+        <span v-if="duration <= 0" class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+        <span>{{ formatTime(displayTime) }}</span>
+      </span>
+      <span :class="{ 'font-semibold text-rose-400 tracking-wider text-[11px]': duration <= 0 }">
+        {{ duration > 0 ? formatTime(duration) : 'LIVE BROADCAST' }}
+      </span>
     </div>
   </div>
 </template>
