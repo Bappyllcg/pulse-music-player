@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AudioLines,
   Check,
@@ -31,7 +31,7 @@ import {
 import MarqueeText from './components/MarqueeText.vue'
 import WaveformScrubber from './components/WaveformScrubber.vue'
 
-const LiveTvModal = defineAsyncComponent(() => import('./components/LiveTvModal.vue'))
+import LiveTvModal from './components/LiveTvModal.vue'
 import { useAudioStorage } from './composables/useAudioStorage'
 import { useLiveTv, type TvCategoryId, type TvRegionId } from './composables/useLiveTv'
 import { useOnlineMusic } from './composables/useOnlineMusic'

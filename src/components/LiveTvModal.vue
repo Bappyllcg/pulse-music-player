@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import {
   Activity,
@@ -283,7 +283,7 @@ function updateStats(): void {
   }
 }
 
-function loadChannelStream(channel: TvChannel): void {
+async function loadChannelStream(channel: TvChannel): Promise<void> {
   cleanUpHls()
   isBuffering.value = true
   isPlayingVideo.value = false
@@ -295,6 +295,10 @@ function loadChannelStream(channel: TvChannel): void {
   showAspectMenu.value = false
   triggerZapBanner()
   resetIdleTimer()
+
+  if (!videoRef.value) {
+    await nextTick()
+  }
 
   const video = videoRef.value
   if (!video) return
@@ -449,15 +453,14 @@ function onVideoPlaying(): void {
 }
 
 watch(
-  () => props.channel,
-  (newChan) => {
-    if (newChan) {
-      loadChannelStream(newChan)
-    } else {
+  () => props.channel?.id,
+  (newId, oldId) => {
+    if (newId && newId !== oldId && props.channel) {
+      void loadChannelStream(props.channel)
+    } else if (!newId) {
       cleanUpHls()
     }
   },
-  { immediate: true },
 )
 
 function toggleFullscreen(): void {
@@ -511,11 +514,17 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement
   })
+
+  // Ensure DOM is ready, then load channel immediately on 1st mount
+  await nextTick()
+  if (props.channel) {
+    void loadChannelStream(props.channel)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -713,6 +722,8 @@ onBeforeUnmount(() => {
         :class="videoClass"
         autoplay
         playsinline
+        webkit-playsinline
+        preload="auto"
         @waiting="isBuffering = true"
         @playing="onVideoPlaying"
         @pause="isPlayingVideo = false"
