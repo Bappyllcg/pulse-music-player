@@ -7,6 +7,7 @@ import {
   Info,
   Music,
   Radio,
+  Settings,
   ShieldCheck,
   Tv,
   X,
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'navigate', filter: 'all' | 'online' | 'radio' | 'tv'): void
   (e: 'openAbout'): void
+  (e: 'openSettings'): void
 }>()
 
 /* ------------------------------------------------------------------ */
@@ -64,6 +66,12 @@ function onNavigate(filter: 'all' | 'online' | 'radio' | 'tv'): void {
 
 function onOpenAbout(): void {
   emit('openAbout')
+  emit('close')
+  emit('update:open', false)
+}
+
+function onOpenSettings(): void {
+  emit('openSettings')
   emit('close')
   emit('update:open', false)
 }
@@ -174,12 +182,29 @@ function onOpenAbout(): void {
           </div>
         </div>
 
-        <!-- About & Information Menu Item Section -->
+        <!-- Preferences & Information Menu Item Section -->
         <div class="space-y-1.5">
           <p class="px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-            About & System
+            Preferences & Info
           </p>
           <div class="space-y-1">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold text-zinc-200 transition active:scale-[0.98] hover:bg-zinc-800/80"
+              @click="onOpenSettings"
+            >
+              <div class="flex items-center gap-2.5">
+                <div class="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400 ring-1 ring-indigo-500/30">
+                  <Settings :size="15" />
+                </div>
+                <div class="text-left">
+                  <div class="text-xs font-semibold text-white">Settings</div>
+                  <div class="text-[10px] font-normal text-zinc-400">Audio, playback & display</div>
+                </div>
+              </div>
+              <ChevronRight :size="14" class="text-zinc-500" />
+            </button>
+
             <button
               type="button"
               class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold text-zinc-200 transition active:scale-[0.98] hover:bg-zinc-800/80"

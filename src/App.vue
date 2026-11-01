@@ -20,6 +20,7 @@ import LiveTvSection from './components/LiveTvSection.vue'
 import MiniPlayerBar from './components/MiniPlayerBar.vue'
 import NowPlayingView from './components/NowPlayingView.vue'
 import RemoveConfirmModal from './components/RemoveConfirmModal.vue'
+import SettingsModal from './components/SettingsModal.vue'
 import SideMenuDrawer from './components/SideMenuDrawer.vue'
 import SleepTimerDrawer from './components/SleepTimerDrawer.vue'
 import TrackList from './components/TrackList.vue'
@@ -265,6 +266,7 @@ function toggleLike(id: string): void {
 const fileInput = ref<HTMLInputElement | null>(null)
 const menuOpen = ref(false)
 const aboutOpen = ref(false)
+const settingsOpen = ref(false)
 const playlistOpen = ref(false)
 const sleepOpen = ref(false)
 const notice = ref<string | null>(null)
@@ -448,6 +450,7 @@ watch(sleep.firedCount, () => showNotice('Sleep timer ended. Playback paused.'))
 function closeSheets(): void {
   menuOpen.value = false
   aboutOpen.value = false
+  settingsOpen.value = false
   playlistOpen.value = false
   sleepOpen.value = false
 }
@@ -872,6 +875,13 @@ onBeforeUnmount(() => {
       @close="menuOpen = false"
       @navigate="(f) => { selectedFilter = f; activeTab = 'library' }"
       @open-about="aboutOpen = true"
+      @open-settings="settingsOpen = true"
+    />
+
+    <!-- Dedicated Settings Modal -->
+    <SettingsModal
+      v-model:open="settingsOpen"
+      @close="settingsOpen = false"
     />
 
     <!-- Dedicated About Pulse Modal -->
