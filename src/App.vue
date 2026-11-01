@@ -563,7 +563,10 @@ onBeforeUnmount(() => {
       class="flex h-full flex-col overflow-hidden"
     >
       <!-- Scrollable content area (padded at bottom to clear mini player) -->
-      <div class="flex-1 overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-32">
+      <div
+        class="flex-1 overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]"
+        :class="selectedFilter === 'tv' ? 'pb-10' : 'pb-32'"
+      >
         <!-- Top App Bar with Branding and Actions -->
         <header class="mb-5 flex items-center justify-between">
           <div class="flex items-center gap-3">
@@ -1171,7 +1174,7 @@ onBeforeUnmount(() => {
       <!-- UNIFIED BOTTOM MINI-PLAYER BAR                                 -->
       <!-- ============================================================== -->
       <div
-        v-if="currentTrack"
+        v-if="currentTrack && selectedFilter !== 'tv' && !activePlayingChannel"
         class="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-30"
       >
         <div
