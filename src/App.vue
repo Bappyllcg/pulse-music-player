@@ -6,8 +6,8 @@ import {
   ChevronDown,
   ChevronLeft,
   Heart,
-  Home,
   ListMusic,
+  Maximize2,
   Moon,
   Music,
   Pause,
@@ -50,7 +50,7 @@ const {
   playbackError,
 } = player
 
-/** Active main view: 'library' (Screens 1 & 2) or 'player' (Screen 3) */
+/** Active main view: 'library' | 'player' */
 const activeTab = ref<'library' | 'player'>('library')
 
 /** Filter tabs in library: 'all' | 'liked' | 'recent' */
@@ -112,6 +112,12 @@ const filteredTracks = computed(() => {
   }
 
   return list
+})
+
+/** Progress percentage for the mini player progress bar */
+const progressPercent = computed(() => {
+  if (!duration.value || duration.value <= 0) return 0
+  return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100))
 })
 
 /** Previous and next tracks for the artwork carousel peek in Now Playing */
@@ -243,15 +249,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="relative isolate flex h-dvh select-none flex-col overflow-hidden overscroll-none bg-[#0d0b1a] text-zinc-100"
+    class="relative isolate flex h-dvh select-none flex-col overflow-hidden overscroll-none bg-[#09090b] text-zinc-100"
   >
-    <!-- Background dynamic ambient purple glow -->
+    <!-- Background subtle ambient glow (cool indigo/slate, no hot pink) -->
     <div
-      class="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-gradient-to-b from-purple-700/25 via-fuchsia-900/15 to-transparent blur-3xl"
+      class="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[480px] w-[480px] -translate-x-1/2 rounded-full bg-indigo-950/20 blur-3xl"
     ></div>
     <div
       v-if="currentTrack"
-      :style="{ backgroundImage: `radial-gradient(circle at center, rgba(168, 85, 247, 0.18), transparent 70%)` }"
+      :style="{ backgroundImage: `radial-gradient(circle at center, rgba(99, 102, 241, 0.12), transparent 70%)` }"
       class="pointer-events-none absolute inset-0 -z-10 transition-opacity duration-700"
     ></div>
 
@@ -272,7 +278,7 @@ onBeforeUnmount(() => {
       aria-live="polite"
       role="status"
     >
-      <p v-if="notice" class="mx-auto inline-block rounded-full bg-purple-950/90 px-4 py-2 text-purple-200 ring-1 ring-purple-500/40 shadow-xl backdrop-blur-md">
+      <p v-if="notice" class="mx-auto inline-block rounded-full bg-zinc-900/95 px-4 py-2 text-zinc-200 ring-1 ring-zinc-700/60 shadow-xl backdrop-blur-md">
         {{ notice }}
       </p>
       <p v-else-if="playbackError" class="mx-auto inline-block rounded-full bg-red-950/90 px-4 py-2 text-red-200 ring-1 ring-red-500/40 shadow-xl backdrop-blur-md">
@@ -281,53 +287,70 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- ============================================================== -->
-    <!-- VIEW 1: LIBRARY & DISCOVERY (Screens 1 & 2 in Inspiration)     -->
+    <!-- VIEW 1: LIBRARY & DISCOVERY                                    -->
     <!-- ============================================================== -->
     <div
       v-show="activeTab === 'library'"
-      class="flex h-full flex-col overflow-hidden pb-24 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]"
+      class="flex h-full flex-col overflow-hidden pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]"
+      :class="currentTrack ? 'pb-24' : 'pb-6'"
     >
-      <!-- Brand Header (replacing profile avatar & "Hello Alex" as requested) -->
+      <!-- Brand Header (Clean Titanium & Electric Indigo branding) -->
       <header class="flex items-center justify-between px-6 pt-2 pb-3">
         <div class="flex items-center gap-3">
           <div
-            class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 shadow-lg shadow-purple-500/30"
+            class="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
           >
-            <AudioLines :size="24" :stroke-width="2.5" class="text-white" aria-hidden="true" />
+            <AudioLines :size="22" :stroke-width="2.5" class="text-white" aria-hidden="true" />
           </div>
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-2xl font-black tracking-tight text-white">Pulse</h1>
-              <span class="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300 ring-1 ring-purple-500/30">
+              <span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-zinc-700">
                 PWA
               </span>
             </div>
-            <p class="text-xs font-medium text-purple-200/60">
+            <p class="text-xs font-medium text-zinc-400">
               {{ localCount }} {{ localCount === 1 ? 'track' : 'tracks' }} offline
             </p>
           </div>
         </div>
 
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2">
+          <!-- Sleep timer shortcut button in header -->
+          <button
+            type="button"
+            class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
+            :class="
+              sleep.isActive.value
+                ? 'bg-indigo-500/20 text-indigo-300 ring-indigo-500/50'
+                : 'bg-zinc-900/80 text-zinc-300 ring-zinc-800 hover:text-white'
+            "
+            :aria-label="sleep.isActive.value ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'"
+            :title="sleep.isActive.value ? `Sleep: ${sleepLabel}` : 'Sleep timer'"
+            @click="sleepOpen = true"
+          >
+            <Moon :size="16" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
+          </button>
+
           <!-- Search toggle -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06] text-purple-200 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 active:bg-white/10"
-            :class="{ 'bg-purple-500/30 text-white ring-purple-500/50': showSearch }"
+            class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
+            :class="showSearch ? 'bg-indigo-600/30 text-white ring-indigo-500/50' : 'bg-zinc-900/80 text-zinc-300 ring-zinc-800 hover:text-white'"
             aria-label="Search library"
             @click="showSearch = !showSearch"
           >
-            <Search :size="18" aria-hidden="true" />
+            <Search :size="16" aria-hidden="true" />
           </button>
 
-          <!-- Import button -->
+          <!-- Import button (Professional indigo accent) -->
           <button
             type="button"
-            class="flex h-10 items-center gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-500 px-3.5 text-xs font-bold text-white shadow-lg shadow-purple-600/30 transition active:scale-95 disabled:opacity-50"
+            class="flex h-10 items-center gap-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 px-3.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition active:scale-95 disabled:opacity-50"
             :disabled="isImporting"
             @click="openFilePicker"
           >
-            <Plus :size="15" :stroke-width="3" aria-hidden="true" />
+            <Plus :size="14" :stroke-width="3" aria-hidden="true" />
             <span>{{ isImporting ? 'Importing…' : 'Import' }}</span>
           </button>
         </div>
@@ -336,17 +359,17 @@ onBeforeUnmount(() => {
       <!-- Expandable Search Input -->
       <div v-if="showSearch" class="px-6 py-2">
         <div class="relative flex items-center">
-          <Search :size="16" class="pointer-events-none absolute left-3.5 text-purple-300/60" aria-hidden="true" />
+          <Search :size="16" class="pointer-events-none absolute left-3.5 text-zinc-500" aria-hidden="true" />
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Search songs or artists…"
-            class="w-full rounded-2xl bg-white/[0.07] py-2.5 pr-10 pl-10 text-sm text-white placeholder-purple-300/40 ring-1 ring-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+            class="w-full rounded-2xl bg-zinc-900/90 py-2.5 pr-10 pl-10 text-sm text-zinc-100 placeholder-zinc-500 ring-1 ring-zinc-800 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             v-if="searchQuery"
             type="button"
-            class="absolute right-3 text-purple-300/60 hover:text-white"
+            class="absolute right-3 text-zinc-400 hover:text-white"
             aria-label="Clear search"
             @click="searchQuery = ''"
           >
@@ -355,15 +378,15 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- Category Filter Pills (All / Liked Songs / Recent) -->
+      <!-- Category Filter Pills (Clean Titanium & Indigo) -->
       <nav class="flex items-center gap-2 overflow-x-auto px-6 py-2.5 no-scrollbar" aria-label="Library filters">
         <button
           type="button"
           class="shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition active:scale-95"
           :class="
             selectedFilter === 'all'
-              ? 'bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-600/30'
-              : 'bg-white/[0.05] text-purple-200/70 ring-1 ring-white/10 hover:text-white'
+              ? 'bg-zinc-100 text-zinc-950 shadow-sm'
+              : 'bg-zinc-900/70 text-zinc-400 ring-1 ring-zinc-800 hover:text-zinc-200'
           "
           @click="selectedFilter = 'all'"
         >
@@ -374,8 +397,8 @@ onBeforeUnmount(() => {
           class="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition active:scale-95"
           :class="
             selectedFilter === 'liked'
-              ? 'bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-600/30'
-              : 'bg-white/[0.05] text-purple-200/70 ring-1 ring-white/10 hover:text-white'
+              ? 'bg-zinc-100 text-zinc-950 shadow-sm'
+              : 'bg-zinc-900/70 text-zinc-400 ring-1 ring-zinc-800 hover:text-zinc-200'
           "
           @click="selectedFilter = 'liked'"
         >
@@ -387,8 +410,8 @@ onBeforeUnmount(() => {
           class="shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition active:scale-95"
           :class="
             selectedFilter === 'recent'
-              ? 'bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-600/30'
-              : 'bg-white/[0.05] text-purple-200/70 ring-1 ring-white/10 hover:text-white'
+              ? 'bg-zinc-100 text-zinc-950 shadow-sm'
+              : 'bg-zinc-900/70 text-zinc-400 ring-1 ring-zinc-800 hover:text-zinc-200'
           "
           @click="selectedFilter = 'recent'"
         >
@@ -398,24 +421,23 @@ onBeforeUnmount(() => {
 
       <!-- Scrollable Body Content -->
       <div class="flex-1 overflow-y-auto px-6 pb-6">
-        <!-- Hero Feature Card (Screen 1 "For you / Feel the Beat" in Inspiration) -->
+        <!-- Hero Feature Card -->
         <section class="mt-2 mb-6" aria-label="Featured music banner">
           <div
             v-if="tracks.length === 0"
-            class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-900/60 via-fuchsia-950/40 to-indigo-950/60 p-6 ring-1 ring-white/10 shadow-2xl backdrop-blur-xl"
+            class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-indigo-950/30 p-6 ring-1 ring-white/10 shadow-xl backdrop-blur-xl"
           >
-            <div class="pointer-events-none absolute -right-6 -bottom-6 h-40 w-40 rounded-full bg-purple-500/20 blur-2xl"></div>
             <div class="relative z-10">
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-purple-300">
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-300 ring-1 ring-indigo-500/30">
                 <Sparkles :size="12" /> Offline & Private
               </span>
               <h2 class="mt-2 text-xl font-bold tracking-tight text-white">Your Personal Vault</h2>
-              <p class="mt-1 text-xs text-purple-200/70">
-                No algorithms, trackers, or monthly fees. Import your favourite MP3, M4A, or WAV files to listen anytime offline.
+              <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
+                No algorithms, trackers, or subscriptions. Import your own MP3, M4A, or WAV files to listen 100% offline anytime.
               </p>
               <button
                 type="button"
-                class="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-zinc-950 shadow-lg transition active:scale-95"
+                class="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-zinc-950 shadow-md transition active:scale-95"
                 @click="openFilePicker"
               >
                 <Plus :size="14" :stroke-width="3" />
@@ -426,15 +448,15 @@ onBeforeUnmount(() => {
 
           <div
             v-else-if="currentTrack"
-            class="relative flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-purple-900/50 via-[#1b1434] to-[#120d24] p-5 ring-1 ring-white/10 shadow-xl backdrop-blur-xl transition active:scale-[0.99] cursor-pointer"
+            class="relative flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-indigo-950/40 p-5 ring-1 ring-white/10 shadow-xl backdrop-blur-xl transition active:scale-[0.99] cursor-pointer"
             @click="activeTab = 'player'"
           >
             <div class="min-w-0 flex-1 pr-4">
-              <span class="inline-flex items-center gap-1 rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
+              <span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-300 ring-1 ring-indigo-500/30">
                 Now Playing
               </span>
               <h3 class="mt-1.5 truncate text-base font-bold text-white">{{ currentTrack.title }}</h3>
-              <p class="truncate text-xs text-purple-200/60">{{ currentTrack.artist }}</p>
+              <p class="truncate text-xs text-zinc-400">{{ currentTrack.artist }}</p>
               <div class="mt-3 flex items-center gap-2">
                 <button
                   type="button"
@@ -457,7 +479,7 @@ onBeforeUnmount(() => {
                 <span
                   v-for="n in 3"
                   :key="n"
-                  class="animate-eq h-3.5 w-1 origin-bottom rounded-full bg-purple-300"
+                  class="animate-eq h-3.5 w-1 origin-bottom rounded-full bg-indigo-400"
                   :style="{ animationDelay: `${n * 0.15}s` }"
                 ></span>
               </div>
@@ -465,22 +487,22 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <!-- Track List ("Your library" Screen 2 in Inspiration) -->
+        <!-- Track List -->
         <section aria-label="Track list">
           <div class="mb-3 flex items-center justify-between">
             <h2 class="text-lg font-bold text-white">Your library</h2>
-            <span class="text-xs font-medium text-purple-200/50">
+            <span class="text-xs font-medium text-zinc-500">
               {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? 'song' : 'songs' }}
             </span>
           </div>
 
           <div
             v-if="filteredTracks.length === 0"
-            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-white/[0.02] py-12 text-center ring-1 ring-white/5"
+            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
           >
-            <Music :size="32" class="text-purple-300/40" />
-            <p class="text-sm font-medium text-purple-200/70">No tracks found</p>
-            <p class="text-xs text-purple-200/40">
+            <Music :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">No tracks found</p>
+            <p class="text-xs text-zinc-500">
               {{ searchQuery ? 'Try adjusting your search query.' : 'Import audio files to build your offline library.' }}
             </p>
           </div>
@@ -489,15 +511,15 @@ onBeforeUnmount(() => {
             <li
               v-for="track in filteredTracks"
               :key="track.id"
-              class="group flex items-center justify-between rounded-2xl bg-white/[0.03] p-2.5 ring-1 ring-white/[0.06] transition active:scale-[0.99] active:bg-white/[0.07]"
-              :class="{ 'bg-purple-950/40 ring-purple-500/30': currentTrack?.id === track.id }"
+              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 ring-white/[0.06] transition active:scale-[0.99] active:bg-zinc-800/80"
+              :class="{ 'bg-indigo-950/30 ring-indigo-500/30': currentTrack?.id === track.id }"
             >
               <!-- Song Info & Thumbnail -->
               <div
                 class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 pr-2"
                 @click="playTrackAndShow(track)"
               >
-                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-purple-950/60 ring-1 ring-white/10">
+                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10">
                   <img :src="track.coverUrl" alt="" class="h-full w-full object-cover" />
                   <div
                     v-if="currentTrack?.id === track.id"
@@ -506,7 +528,7 @@ onBeforeUnmount(() => {
                     <span
                       v-for="n in 3"
                       :key="n"
-                      class="animate-eq mx-[1px] h-3.5 w-1 origin-bottom rounded-full bg-purple-300"
+                      class="animate-eq mx-[1px] h-3.5 w-1 origin-bottom rounded-full bg-indigo-400"
                       :style="{ animationDelay: `${n * 0.15}s`, animationPlayState: isPlaying ? 'running' : 'paused' }"
                     ></span>
                   </div>
@@ -515,32 +537,32 @@ onBeforeUnmount(() => {
                 <div class="min-w-0 flex-1">
                   <p
                     class="truncate text-sm font-semibold"
-                    :class="currentTrack?.id === track.id ? 'text-purple-300' : 'text-white'"
+                    :class="currentTrack?.id === track.id ? 'text-indigo-300' : 'text-zinc-100'"
                   >
                     {{ track.title }}
                   </p>
-                  <p class="truncate text-xs text-purple-200/60">{{ track.artist }}</p>
+                  <p class="truncate text-xs text-zinc-400">{{ track.artist }}</p>
                 </div>
               </div>
 
               <!-- Actions: Duration + Circular Play + Favorite + Delete -->
               <div class="flex shrink-0 items-center gap-2">
-                <span class="text-xs tabular-nums text-purple-200/50">
+                <span class="text-xs tabular-nums text-zinc-500">
                   {{ formatTrackDuration(track.duration) }}
                 </span>
 
                 <!-- Favorite Heart Button -->
                 <button
                   type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-purple-200/40 transition active:scale-90"
-                  :class="{ 'text-fuchsia-400': likedIds.has(track.id) }"
+                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition active:scale-90"
+                  :class="{ 'text-rose-500': likedIds.has(track.id) }"
                   :aria-label="likedIds.has(track.id) ? 'Unlike' : 'Like'"
                   @click.stop="toggleLike(track.id)"
                 >
                   <Heart :size="15" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" />
                 </button>
 
-                <!-- Circular Play Button (mimicking Screen 2) -->
+                <!-- Circular Play Button -->
                 <button
                   type="button"
                   class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition active:scale-90 active:bg-white/20"
@@ -555,7 +577,7 @@ onBeforeUnmount(() => {
                 <button
                   v-if="track.kind === 'local'"
                   type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-purple-200/30 transition active:scale-90 active:text-red-400"
+                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition active:scale-90 active:text-red-400"
                   :aria-label="`Delete ${track.title}`"
                   @click.stop="removeTrack(track.id, track.title)"
                 >
@@ -567,38 +589,80 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
-      <!-- Floating Mini Player (appears when music is playing and browsing library) -->
+      <!-- ============================================================ -->
+      <!-- UNIFIED PROFESSIONAL BOTTOM MINI-PLAYER (Replaces Awkward Dock)-->
+      <!-- ============================================================ -->
       <div
         v-if="currentTrack"
-        class="fixed bottom-20 inset-x-5 z-20 flex cursor-pointer items-center justify-between rounded-2xl bg-[#1c1436]/90 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition active:scale-[0.99]"
-        @click="activeTab = 'player'"
+        class="fixed bottom-0 inset-x-0 z-30 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-1 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent backdrop-blur-md"
       >
-        <div class="flex min-w-0 flex-1 items-center gap-3">
-          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-purple-900 ring-1 ring-white/10">
-            <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
+        <div
+          class="relative flex items-center justify-between overflow-hidden rounded-2xl bg-zinc-900/95 p-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition active:scale-[0.99] cursor-pointer"
+          @click="activeTab = 'player'"
+        >
+          <!-- Top edge micro progress bar -->
+          <div class="absolute top-0 inset-x-3 h-[2px] overflow-hidden rounded-full bg-zinc-800">
+            <div
+              class="h-full bg-indigo-500 transition-all duration-150"
+              :style="{ width: `${progressPercent}%` }"
+            ></div>
           </div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-xs font-bold text-white">{{ currentTrack.title }}</p>
-            <p class="truncate text-[11px] text-purple-200/60">{{ currentTrack.artist }}</p>
-          </div>
-        </div>
 
-        <div class="flex items-center gap-2 pl-2">
-          <button
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-950 shadow transition active:scale-90"
-            :aria-label="isPlaying ? 'Pause' : 'Play'"
-            @click.stop="player.togglePlay()"
-          >
-            <Pause v-if="isPlaying" :size="15" fill="currentColor" />
-            <Play v-else :size="15" fill="currentColor" class="translate-x-0.5" />
-          </button>
+          <div class="flex min-w-0 flex-1 items-center gap-3">
+            <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10">
+              <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
+              <div
+                v-if="isPlaying"
+                class="absolute inset-0 flex items-center justify-center bg-black/40"
+              >
+                <span
+                  v-for="n in 3"
+                  :key="n"
+                  class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-indigo-400"
+                  :style="{ animationDelay: `${n * 0.15}s` }"
+                ></span>
+              </div>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-xs font-bold text-zinc-100">{{ currentTrack.title }}</p>
+              <p class="truncate text-[11px] text-zinc-400">{{ currentTrack.artist }}</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 pl-2">
+            <!-- Favorite button in mini player -->
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition active:scale-90"
+              :class="{ 'text-rose-500': likedIds.has(currentTrack.id) }"
+              :aria-label="likedIds.has(currentTrack.id) ? 'Unlike' : 'Like'"
+              @click.stop="toggleLike(currentTrack.id)"
+            >
+              <Heart :size="16" :fill="likedIds.has(currentTrack.id) ? 'currentColor' : 'none'" />
+            </button>
+
+            <!-- Play / Pause in mini player -->
+            <button
+              type="button"
+              class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90"
+              :aria-label="isPlaying ? 'Pause' : 'Play'"
+              @click.stop="player.togglePlay()"
+            >
+              <Pause v-if="isPlaying" :size="16" fill="currentColor" />
+              <Play v-else :size="16" fill="currentColor" class="translate-x-0.5" />
+            </button>
+
+            <!-- Expand indicator -->
+            <div class="flex h-8 w-8 items-center justify-center text-zinc-400" title="Expand player">
+              <Maximize2 :size="14" aria-hidden="true" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- ============================================================== -->
-    <!-- VIEW 2: NOW PLAYING SCREEN (Screen 3 in Inspiration)           -->
+    <!-- VIEW 2: NOW PLAYING SCREEN                                     -->
     <!-- ============================================================== -->
     <div
       v-show="activeTab === 'player'"
@@ -608,14 +672,14 @@ onBeforeUnmount(() => {
       <header class="flex items-center justify-between py-2">
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 backdrop-blur-md transition active:scale-90"
+          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
           aria-label="Back to library"
           @click="activeTab = 'library'"
         >
           <ChevronLeft :size="20" aria-hidden="true" />
         </button>
 
-        <h2 class="text-sm font-semibold tracking-wide text-purple-200/80 uppercase">
+        <h2 class="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
           Now Playing
         </h2>
 
@@ -624,7 +688,7 @@ onBeforeUnmount(() => {
           <!-- Up Next Queue button -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-purple-200/80 ring-1 ring-white/15 backdrop-blur-md transition active:scale-90 hover:text-white"
+            class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
             aria-label="Up next queue"
             aria-haspopup="dialog"
             :aria-expanded="playlistOpen"
@@ -639,8 +703,8 @@ onBeforeUnmount(() => {
             class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
             :class="
               sleep.isActive.value
-                ? 'bg-purple-500/30 text-white ring-purple-500/60 shadow-lg shadow-purple-500/30'
-                : 'bg-white/[0.08] text-purple-200/80 ring-white/15 backdrop-blur-md'
+                ? 'bg-indigo-600/30 text-indigo-300 ring-indigo-500/60 shadow-lg shadow-indigo-600/30'
+                : 'bg-zinc-900/80 text-zinc-300 ring-white/10 backdrop-blur-md hover:text-white'
             "
             :aria-label="sleep.isActive.value ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'"
             :title="sleep.isActive.value ? `Sleep: ${sleepLabel}` : 'Sleep timer'"
@@ -653,7 +717,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <!-- Center Stage: Artwork Carousel Peek (Screen 3 in Inspiration) -->
+      <!-- Center Stage: Artwork Carousel Peek -->
       <section class="relative my-auto flex items-center justify-center py-2" aria-label="Album artwork carousel">
         <!-- Ambient glow centered strictly behind the artwork -->
         <div
@@ -661,8 +725,8 @@ onBeforeUnmount(() => {
           class="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center"
         >
           <div
-            class="h-64 w-64 rounded-full bg-purple-600/30 blur-3xl transition-all duration-700"
-            :class="isPlaying ? 'scale-110 opacity-70' : 'scale-90 opacity-40'"
+            class="h-64 w-64 rounded-full bg-indigo-600/20 blur-3xl transition-all duration-700"
+            :class="isPlaying ? 'scale-110 opacity-70' : 'scale-90 opacity-30'"
           ></div>
         </div>
 
@@ -679,8 +743,8 @@ onBeforeUnmount(() => {
 
           <!-- Center Active Artwork -->
           <div
-            class="relative z-10 aspect-square w-[min(74vw,18rem)] overflow-hidden rounded-3xl bg-purple-950/80 shadow-2xl ring-1 ring-white/15 transition-all duration-500 ease-out"
-            :class="isPlaying ? 'scale-100 shadow-purple-900/50' : 'scale-[0.88] opacity-80 shadow-black/60'"
+            class="relative z-10 aspect-square w-[min(74vw,18rem)] overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl ring-1 ring-white/15 transition-all duration-500 ease-out"
+            :class="isPlaying ? 'scale-100 shadow-black/80' : 'scale-[0.88] opacity-80 shadow-black/60'"
           >
             <img
               v-if="currentTrack"
@@ -689,7 +753,7 @@ onBeforeUnmount(() => {
               class="h-full w-full object-cover"
               draggable="false"
             />
-            <div v-else class="flex h-full w-full flex-col items-center justify-center gap-2 text-purple-300/40">
+            <div v-else class="flex h-full w-full flex-col items-center justify-center gap-2 text-zinc-600">
               <AudioLines :size="64" />
               <span class="text-xs">No song loaded</span>
             </div>
@@ -709,10 +773,10 @@ onBeforeUnmount(() => {
 
       <!-- Bottom Audio Controls Card -->
       <section class="shrink-0 space-y-4 pt-2">
-        <!-- Title, Artist & Like Button (Screen 3 in Inspiration) -->
+        <!-- Title, Artist & Like Button -->
         <div class="flex items-center justify-between">
           <div class="min-w-0 flex-1 pr-3">
-            <p class="truncate text-xs font-semibold text-purple-300/70">
+            <p class="truncate text-xs font-semibold text-zinc-400">
               {{ currentTrack?.artist ?? 'Pulse Music' }}
             </p>
             <MarqueeText
@@ -725,8 +789,8 @@ onBeforeUnmount(() => {
           <button
             v-if="currentTrack"
             type="button"
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.08] ring-1 ring-white/15 backdrop-blur-md transition active:scale-90"
-            :class="likedIds.has(currentTrack.id) ? 'text-fuchsia-400 ring-fuchsia-500/40' : 'text-white/60'"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-900/80 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90"
+            :class="likedIds.has(currentTrack.id) ? 'text-rose-500 ring-rose-500/30' : 'text-zinc-400'"
             :aria-label="likedIds.has(currentTrack.id) ? 'Unlike song' : 'Like song'"
             @click="toggleLike(currentTrack.id)"
           >
@@ -743,13 +807,13 @@ onBeforeUnmount(() => {
           @seek="player.seek"
         />
 
-        <!-- Primary Transport Controls (Screen 3 in Inspiration) -->
+        <!-- Primary Transport Controls -->
         <div class="flex items-center justify-between pt-1">
           <!-- Shuffle -->
           <button
             type="button"
             class="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90"
-            :class="isShuffle ? 'text-purple-400' : 'text-white/40'"
+            :class="isShuffle ? 'text-indigo-400' : 'text-zinc-500'"
             aria-label="Shuffle"
             @click="player.toggleShuffle()"
           >
@@ -759,7 +823,7 @@ onBeforeUnmount(() => {
           <!-- 10s Rewind -->
           <button
             type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.05] text-purple-200/80 ring-1 ring-white/10 transition active:scale-90 disabled:opacity-40"
+            class="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 disabled:opacity-40"
             :disabled="!currentTrack"
             aria-label="Rewind 10 seconds"
             @click="player.seekBy(-10)"
@@ -778,10 +842,10 @@ onBeforeUnmount(() => {
             <SkipBack :size="26" fill="currentColor" aria-hidden="true" />
           </button>
 
-          <!-- Main Center Circular Play/Pause (Screen 3 in Inspiration) -->
+          <!-- Main Center Circular Play/Pause -->
           <button
             type="button"
-            class="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-tr from-purple-500 via-fuchsia-400 to-white text-zinc-950 shadow-xl shadow-purple-600/40 ring-4 ring-purple-500/20 transition active:scale-90 disabled:opacity-50"
+            class="flex h-16 w-16 items-center justify-center rounded-full bg-white text-zinc-950 shadow-xl shadow-black/50 ring-4 ring-white/10 transition active:scale-90 disabled:opacity-50"
             :disabled="!currentTrack"
             :aria-label="isPlaying ? 'Pause' : 'Play'"
             @click="player.togglePlay()"
@@ -804,7 +868,7 @@ onBeforeUnmount(() => {
           <!-- 10s Forward -->
           <button
             type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.05] text-purple-200/80 ring-1 ring-white/10 transition active:scale-90 disabled:opacity-40"
+            class="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 disabled:opacity-40"
             :disabled="!currentTrack"
             aria-label="Forward 10 seconds"
             @click="player.seekBy(10)"
@@ -816,7 +880,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90"
-            :class="repeatMode === 'off' ? 'text-white/40' : 'text-purple-400'"
+            :class="repeatMode === 'off' ? 'text-zinc-500' : 'text-indigo-400'"
             :aria-label="`Repeat: ${repeatMode}`"
             @click="player.cycleRepeat()"
           >
@@ -826,56 +890,6 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </div>
-
-    <!-- ============================================================== -->
-    <!-- FLOATING ISLAND BOTTOM NAVIGATION DOCK (Screens 1 & 2)         -->
-    <!-- ============================================================== -->
-    <nav
-      v-show="activeTab === 'library'"
-      class="fixed bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#18122e]/85 px-4 py-2 ring-1 ring-white/15 shadow-2xl shadow-purple-950/70 backdrop-blur-2xl"
-      aria-label="Main Navigation Dock"
-    >
-      <!-- Library Tab Button -->
-      <button
-        type="button"
-        class="flex h-11 w-11 items-center justify-center rounded-full transition active:scale-90"
-        :class="activeTab === 'library' ? 'bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-600/40' : 'text-purple-300/60 hover:text-white'"
-        aria-label="Library Home"
-        @click="activeTab = 'library'"
-      >
-        <Home :size="20" aria-hidden="true" />
-      </button>
-
-      <!-- Now Playing Center Tab Button -->
-      <button
-        type="button"
-        class="relative flex h-12 w-12 items-center justify-center rounded-full transition active:scale-90"
-        :class="
-          currentTrack
-            ? 'bg-gradient-to-tr from-purple-600 via-fuchsia-500 to-indigo-400 text-white shadow-xl shadow-purple-500/50'
-            : 'bg-white/[0.08] text-purple-300/50 ring-1 ring-white/10'
-        "
-        aria-label="Now Playing View"
-        @click="activeTab = 'player'"
-      >
-        <Music :size="21" class="transition-transform duration-300" :class="{ 'scale-110': isPlaying }" aria-hidden="true" />
-        <span
-          v-if="isPlaying"
-          class="absolute -top-0.5 -right-0.5 h-3 w-3 animate-ping rounded-full bg-fuchsia-400 opacity-75"
-        ></span>
-      </button>
-
-      <!-- Sleep Timer Tab Button -->
-      <button
-        type="button"
-        class="flex h-11 w-11 items-center justify-center rounded-full transition active:scale-90"
-        :class="sleep.isActive.value ? 'bg-purple-500/30 text-purple-200 ring-1 ring-purple-500/50' : 'text-purple-300/60 hover:text-white'"
-        aria-label="Sleep timer"
-        @click="sleepOpen = true"
-      >
-        <Moon :size="20" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
-      </button>
-    </nav>
 
     <!-- ============================================================== -->
     <!-- PLAYLIST "UP NEXT" DRAWER BOTTOM SHEET                         -->
@@ -888,7 +902,7 @@ onBeforeUnmount(() => {
     ></div>
 
     <aside
-      class="fixed inset-x-0 bottom-0 z-50 flex h-[78dvh] flex-col rounded-t-[2.5rem] bg-[#16102b] pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
+      class="fixed inset-x-0 bottom-0 z-50 flex h-[78dvh] flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
       :class="playlistOpen ? 'translate-y-0' : 'translate-y-full'"
       :inert="playlistOpen ? undefined : true"
       role="dialog"
@@ -896,12 +910,12 @@ onBeforeUnmount(() => {
     >
       <div class="flex items-center justify-between px-6 pt-4 pb-2">
         <div>
-          <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-purple-400/30"></div>
+          <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
           <h2 class="text-xl font-bold text-white">Up Next</h2>
         </div>
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-purple-200 ring-1 ring-white/10 transition active:scale-90"
+          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
           aria-label="Close playlist"
           @click="playlistOpen = false"
         >
@@ -913,11 +927,11 @@ onBeforeUnmount(() => {
         v-if="tracks.length === 0"
         class="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-10 text-center"
       >
-        <ListMusic :size="40" class="text-purple-400/40" aria-hidden="true" />
-        <p class="text-sm text-purple-200/70">Your library is empty. Import audio files to get started.</p>
+        <ListMusic :size="40" class="text-zinc-600" aria-hidden="true" />
+        <p class="text-sm text-zinc-400">Your library is empty. Import audio files to get started.</p>
         <button
           type="button"
-          class="mt-2 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-500 px-4 py-2 text-xs font-bold text-white shadow-lg"
+          class="mt-2 rounded-full bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-lg"
           @click="openFilePicker"
         >
           Import Audio Files
@@ -928,15 +942,15 @@ onBeforeUnmount(() => {
         <li
           v-for="track in tracks"
           :key="track.id"
-          class="flex items-center justify-between rounded-2xl p-2.5 transition active:bg-white/[0.06]"
-          :class="currentTrack?.id === track.id ? 'bg-purple-950/50 ring-1 ring-purple-500/30' : 'bg-white/[0.02]'"
+          class="flex items-center justify-between rounded-2xl p-2.5 transition active:bg-zinc-800/80"
+          :class="currentTrack?.id === track.id ? 'bg-indigo-950/40 ring-1 ring-indigo-500/30' : 'bg-zinc-800/40'"
         >
           <button
             type="button"
             class="flex min-w-0 flex-1 items-center gap-3 text-left"
             @click="player.selectTrack(track); playlistOpen = false"
           >
-            <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-purple-950">
+            <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800">
               <img :src="track.coverUrl" alt="" class="h-full w-full object-cover" />
               <div
                 v-if="currentTrack?.id === track.id"
@@ -945,7 +959,7 @@ onBeforeUnmount(() => {
                 <span
                   v-for="n in 3"
                   :key="n"
-                  class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-purple-300"
+                  class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-indigo-400"
                   :style="{ animationDelay: `${n * 0.15}s` }"
                 ></span>
               </div>
@@ -954,20 +968,20 @@ onBeforeUnmount(() => {
             <div class="min-w-0 flex-1">
               <p
                 class="truncate text-sm font-semibold"
-                :class="currentTrack?.id === track.id ? 'text-purple-300' : 'text-white'"
+                :class="currentTrack?.id === track.id ? 'text-indigo-300' : 'text-zinc-100'"
               >
                 {{ track.title }}
               </p>
-              <p class="truncate text-xs text-purple-200/60">{{ track.artist }}</p>
+              <p class="truncate text-xs text-zinc-400">{{ track.artist }}</p>
             </div>
           </button>
 
           <div class="flex items-center gap-2 pl-2">
-            <span class="text-xs tabular-nums text-purple-200/50">{{ formatTrackDuration(track.duration) }}</span>
+            <span class="text-xs tabular-nums text-zinc-500">{{ formatTrackDuration(track.duration) }}</span>
             <button
               v-if="track.kind === 'local'"
               type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-full text-purple-200/40 transition active:scale-90 active:text-red-400"
+              class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition active:scale-90 active:text-red-400"
               :aria-label="`Delete ${track.title}`"
               @click="removeTrack(track.id, track.title)"
             >
@@ -989,7 +1003,7 @@ onBeforeUnmount(() => {
     ></div>
 
     <aside
-      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] bg-[#16102b] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
+      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
       :class="sleepOpen ? 'translate-y-0' : 'translate-y-full'"
       :inert="sleepOpen ? undefined : true"
       role="dialog"
@@ -997,12 +1011,12 @@ onBeforeUnmount(() => {
     >
       <div class="flex items-center justify-between px-6 pt-4 pb-2">
         <div>
-          <div class="mb-2 h-1 w-10 rounded-full bg-purple-400/30"></div>
+          <div class="mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
           <h2 class="text-xl font-bold text-white">Sleep Timer</h2>
         </div>
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-purple-200 ring-1 ring-white/10 transition active:scale-90"
+          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
           aria-label="Close sleep timer"
           @click="sleepOpen = false"
         >
@@ -1014,23 +1028,23 @@ onBeforeUnmount(() => {
         <li v-for="minutes in SLEEP_MINUTE_OPTIONS" :key="minutes">
           <button
             type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-white/[0.08]"
-            :class="sleep.selection.value === minutes ? 'bg-purple-900/40 text-purple-300 ring-1 ring-purple-500/40' : 'text-zinc-200'"
+            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-zinc-800"
+            :class="sleep.selection.value === minutes ? 'bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/40' : 'text-zinc-200'"
             @click="chooseSleepMinutes(minutes)"
           >
             <span>{{ minutes }} minutes</span>
-            <Check v-if="sleep.selection.value === minutes" :size="18" class="text-purple-300" aria-hidden="true" />
+            <Check v-if="sleep.selection.value === minutes" :size="18" class="text-indigo-400" aria-hidden="true" />
           </button>
         </li>
         <li>
           <button
             type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-white/[0.08]"
-            :class="sleep.selection.value === 'track' ? 'bg-purple-900/40 text-purple-300 ring-1 ring-purple-500/40' : 'text-zinc-200'"
+            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-zinc-800"
+            :class="sleep.selection.value === 'track' ? 'bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/40' : 'text-zinc-200'"
             @click="chooseSleepEndOfTrack"
           >
             <span>End of current track</span>
-            <Check v-if="sleep.selection.value === 'track'" :size="18" class="text-purple-300" aria-hidden="true" />
+            <Check v-if="sleep.selection.value === 'track'" :size="18" class="text-indigo-400" aria-hidden="true" />
           </button>
         </li>
         <li v-if="sleep.isActive.value">

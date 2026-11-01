@@ -108,8 +108,8 @@ function handlePointerUp(_e: PointerEvent): void {
         :style="{ height: `${barHeight}%` }"
         :class="
           (idx / BAR_COUNT) * 100 <= progressPercent
-            ? 'bg-gradient-to-t from-purple-500 via-fuchsia-400 to-white shadow-[0_0_6px_rgba(192,132,252,0.4)]'
-            : 'bg-white/15'
+            ? 'bg-gradient-to-t from-indigo-500 via-indigo-400 to-white shadow-[0_0_6px_rgba(99,102,241,0.35)]'
+            : 'bg-zinc-800/80'
         "
       ></div>
 
@@ -124,7 +124,7 @@ function handlePointerUp(_e: PointerEvent): void {
     </div>
 
     <!-- Timestamps below waveform -->
-    <div class="mt-1 flex items-center justify-between text-xs font-medium tabular-nums text-purple-200/60">
+    <div class="mt-1 flex items-center justify-between text-xs font-medium tabular-nums text-zinc-400">
       <span>{{ formatTime(displayTime) }}</span>
       <span>{{ formatTime(duration) }}</span>
     </div>
