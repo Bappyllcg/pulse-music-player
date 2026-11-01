@@ -1057,13 +1057,69 @@ onBeforeUnmount(() => {
           <!-- Generic empty state -->
           <div
             v-else-if="filteredTracks.length === 0"
-            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
+            class="flex flex-col items-center justify-center gap-3.5 rounded-3xl bg-zinc-900/40 py-14 px-6 text-center ring-1 ring-zinc-800/80"
           >
-            <Music :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">No tracks found</p>
-            <p class="text-xs text-zinc-500">
-              {{ searchQuery ? 'Try adjusting your search query.' : selectedFilter === 'liked' ? 'No liked tracks yet. Tap the heart on any song to add it!' : 'Import audio files to build your offline library.' }}
-            </p>
+            <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-800/70 text-zinc-500 ring-1 ring-white/10 shadow-inner">
+              <Music :size="28" />
+            </div>
+
+            <div class="max-w-xs space-y-1">
+              <p class="text-base font-bold text-zinc-200">No tracks found</p>
+              <p class="text-xs text-zinc-400 leading-relaxed">
+                {{
+                  searchQuery
+                    ? (selectedFilter === 'online'
+                        ? `No online tracks matching “${searchQuery}”.`
+                        : selectedFilter === 'radio'
+                          ? `No radio stations matching “${searchQuery}”.`
+                          : `No tracks matching “${searchQuery}”. Try searching online music or importing files.`)
+                    : selectedFilter === 'liked'
+                      ? 'No liked tracks yet. Tap the heart on any song to add it!'
+                      : selectedFilter === 'recent'
+                        ? 'No recently played tracks yet.'
+                        : selectedFilter === 'online'
+                          ? 'No online music found. Try another genre.'
+                          : selectedFilter === 'radio'
+                            ? 'No radio stations found. Try another category.'
+                            : 'Import audio files from your device or stream free online music.'
+                }}
+              </p>
+            </div>
+
+            <!-- Action buttons: Import & Online Music -->
+            <div class="mt-2 flex flex-wrap items-center justify-center gap-2.5">
+              <!-- Import Button -->
+              <button
+                type="button"
+                class="flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500 disabled:opacity-50"
+                :disabled="isImporting"
+                @click="openFilePicker"
+              >
+                <Plus :size="15" />
+                <span>{{ isImporting ? 'Adding...' : 'Import Audio' }}</span>
+              </button>
+
+              <!-- Online Music Button -->
+              <button
+                type="button"
+                class="flex items-center gap-2 rounded-full bg-zinc-800/90 px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-md ring-1 ring-white/10 transition active:scale-95 hover:bg-zinc-700 hover:text-white"
+                @click="selectOnlineFilter"
+              >
+                <Globe :size="15" class="text-indigo-400" />
+                <span>Online Music</span>
+              </button>
+
+              <!-- Clear search button if search query is active -->
+              <button
+                v-if="searchQuery"
+                type="button"
+                class="flex items-center gap-1.5 rounded-full bg-zinc-800/50 px-3.5 py-2 text-xs font-medium text-zinc-400 ring-1 ring-white/5 transition active:scale-95 hover:text-zinc-200"
+                @click="searchQuery = ''"
+              >
+                <X :size="13" />
+                <span>Clear search</span>
+              </button>
+            </div>
           </div>
 
           <ul v-else class="space-y-2">
@@ -1549,14 +1605,25 @@ onBeforeUnmount(() => {
         class="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-10 text-center"
       >
         <ListMusic :size="40" class="text-zinc-600" aria-hidden="true" />
-        <p class="text-sm text-zinc-400">Your library is empty. Import audio files to get started.</p>
-        <button
-          type="button"
-          class="mt-2 rounded-full bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-lg"
-          @click="openFilePicker"
-        >
-          Import Audio Files
-        </button>
+        <p class="text-sm text-zinc-400">Your library is empty. Import audio files or discover online music.</p>
+        <div class="mt-2 flex flex-wrap items-center justify-center gap-2.5">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500"
+            @click="openFilePicker"
+          >
+            <Plus :size="14" />
+            <span>Import Audio</span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 transition active:scale-95 hover:bg-zinc-700 hover:text-white"
+            @click="closeSheets(); selectOnlineFilter(); activeTab = 'library'"
+          >
+            <Globe :size="14" class="text-indigo-400" />
+            <span>Online Music</span>
+          </button>
+        </div>
       </div>
 
       <ul v-else class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 space-y-1.5" aria-label="Queued tracks">
