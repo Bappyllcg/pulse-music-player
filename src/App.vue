@@ -619,20 +619,38 @@ onBeforeUnmount(() => {
           Now Playing
         </h2>
 
-        <!-- Sleep timer modal button -->
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
-          :class="
-            sleep.isActive.value
-              ? 'bg-purple-500/30 text-white ring-purple-500/60'
-              : 'bg-white/[0.08] text-purple-200/80 ring-white/15 backdrop-blur-md'
-          "
-          aria-label="Sleep timer"
-          @click="sleepOpen = true"
-        >
-          <Moon :size="17" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
-        </button>
+        <!-- Top Right Actions: Up Next Queue & Sleep Timer -->
+        <div class="flex items-center gap-2">
+          <!-- Up Next Queue button -->
+          <button
+            type="button"
+            class="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-purple-200/80 ring-1 ring-white/15 backdrop-blur-md transition active:scale-90 hover:text-white"
+            aria-label="Up next queue"
+            aria-haspopup="dialog"
+            :aria-expanded="playlistOpen"
+            @click="playlistOpen = true"
+          >
+            <ListMusic :size="18" aria-hidden="true" />
+          </button>
+
+          <!-- Sleep timer modal button -->
+          <button
+            type="button"
+            class="flex h-10 w-10 items-center justify-center rounded-full ring-1 transition active:scale-90"
+            :class="
+              sleep.isActive.value
+                ? 'bg-purple-500/30 text-white ring-purple-500/60 shadow-lg shadow-purple-500/30'
+                : 'bg-white/[0.08] text-purple-200/80 ring-white/15 backdrop-blur-md'
+            "
+            :aria-label="sleep.isActive.value ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'"
+            :title="sleep.isActive.value ? `Sleep: ${sleepLabel}` : 'Sleep timer'"
+            aria-haspopup="dialog"
+            :aria-expanded="sleepOpen"
+            @click="sleepOpen = true"
+          >
+            <Moon :size="17" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <!-- Center Stage: Artwork Carousel Peek (Screen 3 in Inspiration) -->
@@ -804,35 +822,6 @@ onBeforeUnmount(() => {
           >
             <Repeat1 v-if="repeatMode === 'one'" :size="20" aria-hidden="true" />
             <Repeat v-else :size="20" aria-hidden="true" />
-          </button>
-        </div>
-
-        <!-- Auxiliary Playlist Queue & Sleep Pill Handles -->
-        <div class="flex items-center justify-center gap-3 pt-2">
-          <button
-            type="button"
-            class="flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3.5 py-1.5 text-xs font-semibold text-purple-200/80 ring-1 ring-white/10 backdrop-blur-md transition active:scale-95 hover:text-white"
-            aria-haspopup="dialog"
-            :aria-expanded="playlistOpen"
-            @click="playlistOpen = true"
-          >
-            <ListMusic :size="14" aria-hidden="true" />
-            <span>Up Next ({{ tracks.length }})</span>
-          </button>
-          <button
-            type="button"
-            class="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold tabular-nums ring-1 transition active:scale-95"
-            :class="
-              sleep.isActive.value
-                ? 'bg-purple-500/20 text-purple-300 ring-purple-500/50'
-                : 'bg-white/[0.06] text-purple-200/80 ring-white/10 backdrop-blur-md'
-            "
-            aria-haspopup="dialog"
-            :aria-expanded="sleepOpen"
-            @click="sleepOpen = true"
-          >
-            <Moon :size="14" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
-            <span>{{ sleepLabel }}</span>
           </button>
         </div>
       </section>
