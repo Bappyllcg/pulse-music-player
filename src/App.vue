@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AudioLines,
   Check,
@@ -25,11 +25,15 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  Tv,
   X,
 } from 'lucide-vue-next'
 import MarqueeText from './components/MarqueeText.vue'
 import WaveformScrubber from './components/WaveformScrubber.vue'
+
+const LiveTvModal = defineAsyncComponent(() => import('./components/LiveTvModal.vue'))
 import { useAudioStorage } from './composables/useAudioStorage'
+import { useLiveTv, type TvCategoryId, type TvRegionId } from './composables/useLiveTv'
 import { useOnlineMusic } from './composables/useOnlineMusic'
 import { usePlayer } from './composables/usePlayer'
 import { useRadio } from './composables/useRadio'
@@ -44,6 +48,7 @@ const player = usePlayer()
 const sleep = useSleepTimer()
 const onlineMusic = useOnlineMusic()
 const radio = useRadio()
+const liveTv = useLiveTv()
 
 const { tracks, localCount, isImporting } = storage
 const {
@@ -67,6 +72,24 @@ const {
   fetchRadioStations,
 } = radio
 const {
+  channels: tvChannels,
+  filteredChannels: filteredTvChannels,
+  isLoadingTv,
+  tvError,
+  activeRegion: activeTvRegion,
+  activeCategory: activeTvCategory,
+  currentTvSearch,
+  activePlayingChannel,
+  regions: tvRegions,
+  categories: tvCategories,
+  selectRegion: selectTvRegion,
+  selectCategory: selectTvCategory,
+  playChannel: playTvChannel,
+  closePlayer: closeTvPlayer,
+  playNextChannel: playNextTvChannel,
+  playPrevChannel: playPrevTvChannel,
+} = liveTv
+const {
   currentTrack,
   isPlaying,
   currentTime,
@@ -79,8 +102,8 @@ const {
 /** Active main view: 'library' | 'player' */
 const activeTab = ref<'library' | 'player'>('library')
 
-/** Filter tabs in library: 'all' | 'liked' | 'recent' | 'online' | 'radio' */
-const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online' | 'radio'>('all')
+/** Filter tabs in library: 'all' | 'liked' | 'recent' | 'online' | 'radio' | 'tv' */
+const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online' | 'radio' | 'tv'>('all')
 
 /** Search */
 const showSearch = ref(false)
@@ -99,6 +122,8 @@ watch(searchQuery, (newQuery) => {
     searchDebounceTimer = window.setTimeout(() => {
       void searchRadio(newQuery)
     }, 350)
+  } else if (selectedFilter.value === 'tv') {
+    currentTvSearch.value = newQuery
   }
 })
 
@@ -130,6 +155,29 @@ async function selectRadioFilter(): Promise<void> {
   }
 }
 
+async function selectTvFilter(): Promise<void> {
+  selectedFilter.value = 'tv'
+  if (tvChannels.value.length === 0) {
+    await selectTvRegion('bd')
+  }
+}
+
+async function onSelectTvRegion(regionId: TvRegionId): Promise<void> {
+  searchQuery.value = ''
+  await selectTvRegion(regionId)
+}
+
+function onSelectTvCategory(categoryId: TvCategoryId): void {
+  selectTvCategory(categoryId)
+}
+
+function onPlayTvChannel(channel: typeof liveTv.channels.value[0]): void {
+  if (player.isPlaying.value) {
+    player.pause()
+  }
+  playTvChannel(channel)
+}
+
 const activeGenreLabel = computed(() => {
   if (searchQuery.value.trim()) {
     return `Results for “${searchQuery.value.trim()}”`
@@ -144,6 +192,19 @@ const activeRadioLabel = computed(() => {
   }
   const found = radioCategories.find((c) => c.id === activeRadioCategoryId.value)
   return found ? `${found.label} Radio` : 'Live Radio'
+})
+
+const activeTvLabel = computed(() => {
+  if (searchQuery.value.trim()) {
+    return `TV: “${searchQuery.value.trim()}”`
+  }
+  const reg = tvRegions.find((r) => r.id === activeTvRegion.value)
+  const cat = tvCategories.find((c) => c.id === activeTvCategory.value)
+  const prefix = reg ? `${reg.flag} ${reg.label}` : 'Live TV'
+  if (activeTvCategory.value === 'all') {
+    return `${prefix} TV`
+  }
+  return `${prefix} • ${cat?.label ?? ''}`
 })
 
 /** Liked track IDs stored in localStorage */
@@ -625,6 +686,19 @@ onBeforeUnmount(() => {
             <Radio :size="13" />
             <span>Live Radio</span>
           </button>
+          <button
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            :class="
+              selectedFilter === 'tv'
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+            "
+            @click="selectTvFilter"
+          >
+            <Tv :size="13" />
+            <span>Live TV</span>
+          </button>
         </div>
 
         <!-- Online Music Genre Filtration Sub-Bar -->
@@ -669,57 +743,190 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- Track List -->
-        <section aria-label="Track list">
+        <!-- Live TV Country / Region Priority Bar (BD 1st, IN 2nd, PK 3rd, Global 4th) -->
+        <div
+          v-if="selectedFilter === 'tv'"
+          class="mb-2.5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+        >
+          <button
+            v-for="reg in tvRegions"
+            :key="reg.id"
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95"
+            :class="
+              activeTvRegion === reg.id
+                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
+            "
+            @click="onSelectTvRegion(reg.id)"
+          >
+            <span>{{ reg.flag }}</span>
+            <span>{{ reg.label }}</span>
+          </button>
+        </div>
+
+        <!-- Live TV Massive Category Filtration Sub-Bar -->
+        <div
+          v-if="selectedFilter === 'tv'"
+          class="mb-5 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
+        >
+          <button
+            v-for="cat in tvCategories"
+            :key="cat.id"
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1 text-[11px] font-semibold transition active:scale-95"
+            :class="
+              activeTvCategory === cat.id
+                ? 'bg-zinc-100 text-zinc-950 font-bold shadow-md ring-1 ring-white'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/5 hover:text-white hover:bg-zinc-800'
+            "
+            @click="onSelectTvCategory(cat.id)"
+          >
+            <span>{{ cat.label }}</span>
+          </button>
+        </div>
+
+        <!-- Track List / TV Channel Grid -->
+        <section aria-label="Media list">
           <div class="mb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-bold text-white">
                 {{
-                  selectedFilter === 'online'
-                    ? activeGenreLabel
-                    : selectedFilter === 'radio'
-                      ? activeRadioLabel
-                      : selectedFilter === 'liked'
-                        ? 'Liked'
-                        : selectedFilter === 'recent'
-                          ? 'Recent Tracks'
-                          : 'Your library'
+                  selectedFilter === 'tv'
+                    ? activeTvLabel
+                    : selectedFilter === 'online'
+                      ? activeGenreLabel
+                      : selectedFilter === 'radio'
+                        ? activeRadioLabel
+                        : selectedFilter === 'liked'
+                          ? 'Liked'
+                          : selectedFilter === 'recent'
+                            ? 'Recent Tracks'
+                            : 'Your library'
                 }}
               </h2>
               <button
-                v-if="selectedFilter === 'online' || selectedFilter === 'radio'"
+                v-if="selectedFilter === 'online' || selectedFilter === 'radio' || selectedFilter === 'tv'"
                 type="button"
                 class="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition hover:text-white hover:bg-zinc-800"
-                :title="selectedFilter === 'radio' ? 'Refresh radio stations' : 'Refresh online tracks'"
-                @click="selectedFilter === 'radio' ? fetchRadioStations(true) : fetchOnlineTracks(true)"
+                :title="selectedFilter === 'tv' ? 'Refresh TV channels' : selectedFilter === 'radio' ? 'Refresh radio stations' : 'Refresh online tracks'"
+                @click="selectedFilter === 'tv' ? selectTvRegion(activeTvRegion, true) : selectedFilter === 'radio' ? fetchRadioStations(true) : fetchOnlineTracks(true)"
               >
                 <RefreshCw
                   :size="13"
-                  :class="{ 'animate-spin': selectedFilter === 'radio' ? isLoadingRadio : isLoadingOnline }"
+                  :class="{ 'animate-spin': selectedFilter === 'tv' ? isLoadingTv : selectedFilter === 'radio' ? isLoadingRadio : isLoadingOnline }"
                 />
               </button>
             </div>
             <div class="flex items-center gap-2">
               <span
-                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio)) && filteredTracks.length > 0"
+                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio) || (selectedFilter === 'tv' && isLoadingTv)) && (selectedFilter === 'tv' ? filteredTvChannels.length > 0 : filteredTracks.length > 0)"
                 class="flex items-center gap-1 text-[11px] font-medium"
-                :class="selectedFilter === 'radio' ? 'text-rose-400' : 'text-indigo-400'"
+                :class="selectedFilter === 'tv' ? 'text-amber-400' : selectedFilter === 'radio' ? 'text-rose-400' : 'text-indigo-400'"
               >
                 <span
                   class="h-1.5 w-1.5 rounded-full animate-ping"
-                  :class="selectedFilter === 'radio' ? 'bg-rose-400' : 'bg-indigo-400'"
+                  :class="selectedFilter === 'tv' ? 'bg-amber-400' : selectedFilter === 'radio' ? 'bg-rose-400' : 'bg-indigo-400'"
                 ></span>
-                <span>{{ selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
+                <span>{{ selectedFilter === 'tv' ? 'Updating...' : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
               </span>
               <span class="text-xs font-medium text-zinc-500">
-                {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'radio' ? 'station' : selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'radio' ? 'stations' : selectedFilter === 'online' ? 'tracks' : 'songs') }}
+                {{
+                  selectedFilter === 'tv'
+                    ? `${filteredTvChannels.length} ${filteredTvChannels.length === 1 ? 'channel' : 'channels'}`
+                    : `${filteredTracks.length} ${filteredTracks.length === 1 ? (selectedFilter === 'radio' ? 'station' : selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'radio' ? 'stations' : selectedFilter === 'online' ? 'tracks' : 'songs')}`
+                }}
               </span>
+            </div>
+          </div>
+
+          <!-- Loading state for Live TV -->
+          <div
+            v-if="selectedFilter === 'tv' && isLoadingTv && filteredTvChannels.length === 0"
+            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
+          >
+            <div class="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent"></div>
+            <p class="text-sm font-medium text-zinc-300">Fetching live TV playlist...</p>
+            <p class="text-xs text-zinc-500">Connecting to iptv-org directory</p>
+          </div>
+
+          <!-- Error state for Live TV -->
+          <div
+            v-else-if="selectedFilter === 'tv' && tvError && filteredTvChannels.length === 0"
+            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
+          >
+            <Tv :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">{{ tvError }}</p>
+            <button
+              type="button"
+              class="mt-1 rounded-full bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-amber-500"
+              @click="selectTvRegion(activeTvRegion, true)"
+            >
+              Retry
+            </button>
+          </div>
+
+          <!-- Empty state for Live TV -->
+          <div
+            v-else-if="selectedFilter === 'tv' && filteredTvChannels.length === 0"
+            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
+          >
+            <Tv :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">No TV channels found</p>
+            <p class="text-xs text-zinc-500">Try changing category or clearing your search.</p>
+          </div>
+
+          <!-- Live TV Channel Grid -->
+          <div v-else-if="selectedFilter === 'tv'" class="space-y-2">
+            <div
+              v-for="ch in filteredTvChannels"
+              :key="ch.id"
+              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 ring-white/[0.06] transition active:scale-[0.99] active:bg-zinc-800/80 cursor-pointer hover:bg-zinc-800/60"
+              @click="onPlayTvChannel(ch)"
+            >
+              <div class="flex min-w-0 flex-1 items-center gap-3 pr-2">
+                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-950 p-1 ring-1 ring-white/10 flex items-center justify-center">
+                  <img
+                    v-if="ch.logo"
+                    :src="ch.logo"
+                    :alt="ch.cleanName"
+                    class="h-full w-full object-contain"
+                    loading="lazy"
+                    @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
+                  />
+                  <Tv v-else :size="20" class="text-zinc-500" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <p class="truncate text-sm font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors">
+                      {{ ch.cleanName }}
+                    </p>
+                    <span
+                      v-if="ch.resolution"
+                      class="shrink-0 rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-bold text-cyan-400 ring-1 ring-cyan-500/30"
+                    >
+                      {{ ch.resolution }}
+                    </span>
+                  </div>
+                  <p class="truncate text-xs text-zinc-400">{{ ch.group || 'Live Stream' }}</p>
+                </div>
+              </div>
+
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20">
+                  <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                  LIVE
+                </span>
+                <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white">
+                  <Play :size="14" fill="currentColor" class="translate-x-0.5" />
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Loading state for online / radio -->
           <div
-            v-if="((isLoadingOnline && selectedFilter === 'online') || (isLoadingRadio && selectedFilter === 'radio')) && filteredTracks.length === 0"
+            v-else-if="((isLoadingOnline && selectedFilter === 'online') || (isLoadingRadio && selectedFilter === 'radio')) && filteredTracks.length === 0"
             class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
           >
             <div
@@ -1451,5 +1658,16 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </transition>
+
+    <!-- Live TV Player Modal (HLS.js / Safari Native) -->
+    <LiveTvModal
+      v-if="activePlayingChannel"
+      :channel="activePlayingChannel"
+      :channels="filteredTvChannels"
+      @close="closeTvPlayer"
+      @select-channel="onPlayTvChannel"
+      @next="playNextTvChannel"
+      @prev="playPrevTvChannel"
+    />
   </div>
 </template>
