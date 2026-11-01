@@ -28,6 +28,7 @@ import {
   useLiveTv,
   type TvChannel,
 } from '../composables/useLiveTv'
+import { useHorizontalScroll } from '../composables/useHorizontalScroll'
 
 const props = defineProps<{
   channel: TvChannel | null
@@ -57,6 +58,7 @@ const streamError = ref<string | null>(null)
 const isFullscreen = ref(false)
 const showChannelDrawer = ref(true)
 const zappingGuideContainerRef = ref<HTMLDivElement | null>(null)
+const zappingScroll = useHorizontalScroll(zappingGuideContainerRef)
 
 // Glassmorphic Player UI state
 const areControlsVisible = ref(true)
@@ -488,6 +490,12 @@ function scrollToActiveChannel(smooth = true): void {
       })
     }
   })
+}
+
+function handleSelectChannel(ch: TvChannel): void {
+  if (zappingScroll.isDragClick()) return
+  emit('selectChannel', ch)
+  scrollToActiveChannel(true)
 }
 
 watch(
@@ -1054,25 +1062,45 @@ onBeforeUnmount(() => {
         <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
           Zapping Guide ({{ channels.length }})
         </span>
-        <span class="text-[11px] text-zinc-500">Tap channel to watch</span>
+        <div class="flex items-center gap-1.5">
+          <button
+            type="button"
+            :disabled="!zappingScroll.canScrollLeft.value"
+            class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+            aria-label="Scroll channels left"
+            @click="zappingScroll.scrollLeft()"
+          >
+            <ChevronLeft :size="12" />
+          </button>
+          <button
+            type="button"
+            :disabled="!zappingScroll.canScrollRight.value"
+            class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+            aria-label="Scroll channels right"
+            @click="zappingScroll.scrollRight()"
+          >
+            <ChevronRight :size="12" />
+          </button>
+          <span class="text-[11px] text-zinc-500 ml-1">Tap channel to watch</span>
+        </div>
       </div>
 
       <div
         ref="zappingGuideContainerRef"
-        class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth"
+        class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth select-none cursor-grab active:cursor-grabbing"
       >
         <button
           v-for="ch in channels"
           :key="ch.id"
           :data-channel-id="ch.id"
           type="button"
-          class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
+          class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer"
           :class="
             ch.id === channel.id
               ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/40 ring-1 ring-white/20'
               : 'bg-zinc-900/90 text-zinc-300 ring-1 ring-white/5 hover:bg-zinc-800 hover:text-white'
           "
-          @click="emit('selectChannel', ch); scrollToActiveChannel(true)"
+          @click="handleSelectChannel(ch)"
         >
           <img
             v-if="ch.logo"

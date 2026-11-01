@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
   Compass,
+  Grid,
   Heart,
   Music,
   Play,
@@ -11,6 +16,7 @@ import {
   Volume2,
   X,
 } from 'lucide-vue-next'
+import { useHorizontalScroll } from '../composables/useHorizontalScroll'
 import type { PlayableTrack } from '../types/music'
 import type { OnlineGenre } from '../composables/useOnlineMusic'
 
@@ -34,6 +40,25 @@ const emit = defineEmits<{
   (e: 'toggleLike', id: string): void
   (e: 'retry'): void
 }>()
+
+const genreScrollRef = ref<HTMLElement | null>(null)
+const genreScroll = useHorizontalScroll(genreScrollRef)
+const isGenreGridExpanded = ref(false)
+
+function handleSelectGenre(id: string) {
+  if (genreScroll.isDragClick()) return
+  emit('selectGenre', id)
+  genreScroll.scrollActiveIntoView()
+}
+
+function toggleGenreGrid() {
+  isGenreGridExpanded.value = !isGenreGridExpanded.value
+  if (!isGenreGridExpanded.value) {
+    setTimeout(() => {
+      genreScroll.scrollActiveIntoView()
+    }, 100)
+  }
+}
 
 function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '--:--'
@@ -111,26 +136,106 @@ const headerTitle = computed(() => {
     <!-- Curated Genres Filter Pill Bar -->
     <div>
       <div class="mb-2 flex items-center justify-between px-1">
-        <h3 class="text-xs font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider">
-          Top Genres
-        </h3>
-        <span class="text-[11px] text-slate-500 dark:text-zinc-500">
-          {{ genres.length }} genres
-        </span>
+        <div class="flex items-center gap-1.5">
+          <h3 class="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+            Top Genres
+          </h3>
+          <span class="rounded-full bg-purple-100/90 dark:bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-500/30">
+            {{ genres.length }}
+          </span>
+        </div>
+
+        <!-- Carousel Nudges & View All Toggle -->
+        <div class="flex items-center gap-1">
+          <template v-if="!isGenreGridExpanded">
+            <button
+              type="button"
+              :disabled="!genreScroll.canScrollLeft.value"
+              class="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+              title="Scroll left"
+              aria-label="Scroll genres left"
+              @click="genreScroll.scrollLeft()"
+            >
+              <ChevronLeft :size="14" />
+            </button>
+            <button
+              type="button"
+              :disabled="!genreScroll.canScrollRight.value"
+              class="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+              title="Scroll right"
+              aria-label="Scroll genres right"
+              @click="genreScroll.scrollRight()"
+            >
+              <ChevronRight :size="14" />
+            </button>
+          </template>
+
+          <button
+            type="button"
+            class="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition active:scale-95 cursor-pointer
+                   bg-white/85 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/90 shadow-2xs
+                   dark:bg-white/[0.08] dark:hover:bg-white/[0.14] dark:text-zinc-200 dark:border-white/10 dark:hover:text-white"
+            :class="{ 'bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-500/40': isGenreGridExpanded }"
+            @click="toggleGenreGrid"
+          >
+            <Grid :size="11" />
+            <span>{{ isGenreGridExpanded ? 'Collapse' : `All (${genres.length})` }}</span>
+            <ChevronUp v-if="isGenreGridExpanded" :size="12" />
+            <ChevronDown v-else :size="12" />
+          </button>
+        </div>
       </div>
 
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+      <!-- Mode A: Carousel -->
+      <div v-if="!isGenreGridExpanded" class="relative group/genres">
+        <!-- Left Edge Fade -->
+        <div
+          class="pointer-events-none absolute left-0 inset-y-0 w-4 z-10 bg-gradient-to-r from-slate-50 dark:from-[#08080c] to-transparent transition-opacity duration-200"
+          :class="genreScroll.canScrollLeft.value ? 'opacity-100' : 'opacity-0'"
+        ></div>
+
+        <div
+          ref="genreScrollRef"
+          class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 scroll-smooth select-none cursor-grab active:cursor-grabbing"
+        >
+          <button
+            v-for="genre in genres"
+            :key="genre.id"
+            :data-active="activeGenreId === genre.id && !searchQuery.trim()"
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
+            :class="
+              activeGenreId === genre.id && !searchQuery.trim()
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 !text-white shadow-md shadow-indigo-600/30 border-purple-500 font-bold'
+                : 'bg-white text-slate-700 border-slate-200 shadow-xs hover:bg-purple-50/70 hover:text-purple-700 hover:border-purple-200 dark:bg-zinc-900/80 dark:text-zinc-300 dark:border-white/10 dark:hover:text-white dark:hover:bg-zinc-800/80'
+            "
+            @click="handleSelectGenre(genre.id)"
+          >
+            <span>{{ genre.label }}</span>
+          </button>
+        </div>
+
+        <!-- Right Edge Fade -->
+        <div
+          class="pointer-events-none absolute right-0 inset-y-0 w-4 z-10 bg-gradient-to-l from-slate-50 dark:from-[#08080c] to-transparent transition-opacity duration-200"
+          :class="genreScroll.canScrollRight.value ? 'opacity-100' : 'opacity-0'"
+        ></div>
+      </div>
+
+      <!-- Mode B: Expanded Multi-Row Wrapped Grid -->
+      <div v-else class="flex flex-wrap gap-1.5 py-1 max-h-52 overflow-y-auto animate-in fade-in-50 duration-200">
         <button
           v-for="genre in genres"
           :key="genre.id"
+          :data-active="activeGenreId === genre.id && !searchQuery.trim()"
           type="button"
-          class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
+          class="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
           :class="
             activeGenreId === genre.id && !searchQuery.trim()
-              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 !text-white shadow-md shadow-indigo-600/30 border-purple-500'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 !text-white shadow-md shadow-indigo-600/30 border-purple-500 font-bold'
               : 'bg-white text-slate-700 border-slate-200 shadow-xs hover:bg-purple-50/70 hover:text-purple-700 hover:border-purple-200 dark:bg-zinc-900/80 dark:text-zinc-300 dark:border-white/10 dark:hover:text-white dark:hover:bg-zinc-800/80'
           "
-          @click="emit('selectGenre', genre.id)"
+          @click="handleSelectGenre(genre.id); isGenreGridExpanded = false"
         >
           <span>{{ genre.label }}</span>
         </button>
