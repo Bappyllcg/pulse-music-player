@@ -2,15 +2,12 @@
 import { ref } from 'vue'
 import {
   AudioLines,
-  Check,
   ChevronRight,
   Globe,
   Info,
   Music,
   Radio,
-  RefreshCw,
   ShieldCheck,
-  Sparkles,
   Tv,
   X,
 } from 'lucide-vue-next'
@@ -26,6 +23,7 @@ const emit = defineEmits<{
   (e: 'update:open', val: boolean): void
   (e: 'close'): void
   (e: 'navigate', filter: 'all' | 'online' | 'radio' | 'tv'): void
+  (e: 'openAbout'): void
 }>()
 
 /* ------------------------------------------------------------------ */
@@ -58,56 +56,14 @@ function onMenuTouchEnd(): void {
   menuDragOffset.value = 0
 }
 
-/* ------------------------------------------------------------------ */
-/* App Update Checker (PWA & Service Worker)                          */
-/* ------------------------------------------------------------------ */
-
-const isCheckingUpdate = ref(false)
-const updateStatus = ref<'latest' | 'update_available' | 'error' | null>(null)
-const lastUpdateChecked = ref<string | null>(null)
-
-async function checkForUpdate(): Promise<void> {
-  if (isCheckingUpdate.value) return
-  isCheckingUpdate.value = true
-  updateStatus.value = null
-
-  try {
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.getRegistration()
-      if (registration) {
-        await Promise.all([
-          registration.update(),
-          new Promise((resolve) => setTimeout(resolve, 800)),
-        ])
-        if (registration.waiting || registration.installing) {
-          updateStatus.value = 'update_available'
-        } else {
-          updateStatus.value = 'latest'
-        }
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 800))
-        updateStatus.value = 'latest'
-      }
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 600))
-      updateStatus.value = 'latest'
-    }
-    const now = new Date()
-    lastUpdateChecked.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  } catch (err) {
-    console.error('[Pulse] Update check failed:', err)
-    updateStatus.value = 'error'
-  } finally {
-    isCheckingUpdate.value = false
-  }
-}
-
-function applyUpdate(): void {
-  window.location.reload()
-}
-
 function onNavigate(filter: 'all' | 'online' | 'radio' | 'tv'): void {
   emit('navigate', filter)
+  emit('close')
+  emit('update:open', false)
+}
+
+function onOpenAbout(): void {
+  emit('openAbout')
   emit('close')
   emit('update:open', false)
 }
@@ -218,86 +174,33 @@ function onNavigate(filter: 'all' | 'online' | 'radio' | 'tv'): void {
           </div>
         </div>
 
-        <!-- About Section -->
-        <div class="space-y-2">
-          <div class="flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-            <Info :size="12" />
-            <span>About</span>
-          </div>
-
-          <!-- About Card -->
-          <div class="rounded-2xl bg-zinc-800/40 p-4 ring-1 ring-white/[0.08] space-y-3.5">
-            <div class="flex items-start gap-3">
-              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-indigo-400 shadow-md shadow-indigo-600/30 ring-1 ring-white/20">
-                <AudioLines :size="20" class="text-white" />
+        <!-- About & Information Menu Item Section -->
+        <div class="space-y-1.5">
+          <p class="px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            About & System
+          </p>
+          <div class="space-y-1">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold text-zinc-200 transition active:scale-[0.98] hover:bg-zinc-800/80"
+              @click="onOpenAbout"
+            >
+              <div class="flex items-center gap-2.5">
+                <div class="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400 ring-1 ring-indigo-500/30">
+                  <Info :size="15" />
+                </div>
+                <div class="text-left">
+                  <div class="text-xs font-semibold text-white">About Pulse</div>
+                  <div class="text-[10px] font-normal text-zinc-400">Updates, system info & license</div>
+                </div>
               </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <h3 class="text-sm font-bold text-white">Pulse Player</h3>
-                  <span class="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold text-indigo-300 ring-1 ring-indigo-500/30">
-                    v1.0.0
-                  </span>
-                </div>
-                <p class="text-[11px] text-zinc-400 leading-tight mt-0.5">
-                  Private, offline-first media hub for music, radio, and television.
-                </p>
+              <div class="flex items-center gap-2">
+                <span class="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold text-indigo-300 ring-1 ring-indigo-500/30">
+                  v1.0.0
+                </span>
+                <ChevronRight :size="14" class="text-zinc-500" />
               </div>
-            </div>
-
-            <!-- Check for Update Button & Status -->
-            <div class="space-y-2 pt-1 border-t border-white/[0.06]">
-              <button
-                type="button"
-                class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 ring-1 ring-white/20 transition active:scale-[0.98] hover:bg-indigo-500 disabled:opacity-60"
-                :disabled="isCheckingUpdate"
-                @click="checkForUpdate"
-              >
-                <RefreshCw
-                  :size="14"
-                  :class="{ 'animate-spin': isCheckingUpdate }"
-                />
-                <span>{{ isCheckingUpdate ? 'Checking for updates...' : 'Check for update' }}</span>
-              </button>
-
-              <!-- Update Status Alert -->
-              <transition
-                enter-active-class="transition duration-150 ease-out"
-                enter-from-class="-translate-y-1 opacity-0"
-                enter-to-class="translate-y-0 opacity-100"
-              >
-                <div
-                  v-if="updateStatus === 'latest'"
-                  class="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-2.5 text-[11px] font-medium text-emerald-400 ring-1 ring-emerald-500/20"
-                >
-                  <Check :size="13" class="shrink-0" />
-                  <span>Pulse is up to date (checked {{ lastUpdateChecked }})</span>
-                </div>
-
-                <div
-                  v-else-if="updateStatus === 'update_available'"
-                  class="flex flex-col gap-2 rounded-xl bg-amber-500/15 p-2.5 text-[11px] text-amber-200 ring-1 ring-amber-500/30"
-                >
-                  <div class="flex items-center gap-1.5 font-semibold text-amber-300">
-                    <Sparkles :size="13" />
-                    <span>New version available!</span>
-                  </div>
-                  <button
-                    type="button"
-                    class="rounded-lg bg-amber-500 py-1.5 px-3 text-[11px] font-bold text-zinc-950 transition active:scale-95 hover:bg-amber-400"
-                    @click="applyUpdate"
-                  >
-                    Reload to Update
-                  </button>
-                </div>
-
-                <div
-                  v-else-if="updateStatus === 'error'"
-                  class="rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-400 ring-1 ring-rose-500/20"
-                >
-                  Unable to check for updates. Check internet connection.
-                </div>
-              </transition>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -315,4 +218,3 @@ function onNavigate(filter: 'all' | 'online' | 'radio' | 'tv'): void {
     </aside>
   </div>
 </template>
-

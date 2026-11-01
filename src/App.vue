@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-vue-next'
 
+import AboutModal from './components/AboutModal.vue'
 import LiveRadioSection from './components/LiveRadioSection.vue'
 import LiveTvModal from './components/LiveTvModal.vue'
 import LiveTvSection from './components/LiveTvSection.vue'
@@ -263,6 +264,7 @@ function toggleLike(id: string): void {
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const menuOpen = ref(false)
+const aboutOpen = ref(false)
 const playlistOpen = ref(false)
 const sleepOpen = ref(false)
 const notice = ref<string | null>(null)
@@ -445,6 +447,7 @@ watch(sleep.firedCount, () => showNotice('Sleep timer ended. Playback paused.'))
 
 function closeSheets(): void {
   menuOpen.value = false
+  aboutOpen.value = false
   playlistOpen.value = false
   sleepOpen.value = false
 }
@@ -868,6 +871,14 @@ onBeforeUnmount(() => {
       :local-count="localCount"
       @close="menuOpen = false"
       @navigate="(f) => { selectedFilter = f; activeTab = 'library' }"
+      @open-about="aboutOpen = true"
+    />
+
+    <!-- Dedicated About Pulse Modal -->
+    <AboutModal
+      v-model:open="aboutOpen"
+      :local-count="localCount"
+      @close="aboutOpen = false"
     />
 
     <!-- Up Next Queue Sheet -->
