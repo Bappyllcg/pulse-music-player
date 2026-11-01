@@ -13,12 +13,12 @@ import {
   Plus,
   Repeat,
   Repeat1,
+  RotateCcw,
+  RotateCw,
   Shuffle,
   SkipBack,
   SkipForward,
   Trash2,
-  Volume1,
-  Volume2,
 } from 'lucide-vue-next'
 import MarqueeText from './components/MarqueeText.vue'
 import { useAudioStorage } from './composables/useAudioStorage'
@@ -37,8 +37,6 @@ const {
   duration,
   isShuffle,
   repeatMode,
-  volume,
-  volumeSupported,
   playbackError,
 } = player
 
@@ -116,7 +114,6 @@ const displayTime = computed(() => (scrubbing.value ? scrubValue.value : current
 const progressPercent = computed(() =>
   duration.value > 0 ? Math.min(100, (displayTime.value / duration.value) * 100) : 0,
 )
-const volumePercent = computed(() => volume.value * 100)
 
 function onScrubInput(event: Event): void {
   scrubbing.value = true
@@ -126,10 +123,6 @@ function onScrubInput(event: Event): void {
 function onScrubCommit(event: Event): void {
   player.seek((event.target as HTMLInputElement).valueAsNumber)
   scrubbing.value = false
-}
-
-function onVolumeInput(event: Event): void {
-  player.setVolume((event.target as HTMLInputElement).valueAsNumber)
 }
 
 /* ------------------------------ Bottom sheet -------------------------- */
@@ -203,19 +196,19 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="relative isolate flex h-dvh select-none flex-col overflow-hidden overscroll-none bg-zinc-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-zinc-100"
+    class="relative isolate flex h-dvh select-none flex-col overflow-hidden overscroll-none bg-zinc-950 pb-[max(env(safe-area-inset-bottom),0.75rem)] text-zinc-100"
   >
-    <!-- Ambient artwork glow -->
+    <!-- Ambient artwork glow (centered behind the album card so the top status bar / notch remains crisp & dark) -->
     <img
       v-if="currentTrack"
       :src="currentTrack.coverUrl"
       alt=""
       aria-hidden="true"
-      class="pointer-events-none absolute -top-24 left-1/2 -z-10 h-96 w-96 -translate-x-1/2 scale-150 opacity-30 blur-3xl"
+      class="pointer-events-none absolute top-[36%] left-1/2 -z-10 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
     />
 
-    <!-- Header -->
-    <header class="flex items-center justify-between gap-3 px-5 pt-3 pb-2">
+    <!-- Header: comfortable top spacing for iPhone Dynamic Island / notch -->
+    <header class="flex items-center justify-between gap-3 px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-2.5">
       <div class="flex items-center gap-2.5">
         <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500 shadow-lg shadow-indigo-500/30">
           <AudioLines :size="20" :stroke-width="2.5" aria-hidden="true" />
@@ -377,52 +370,57 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- Volume (hidden on iOS, where hardware buttons own the volume) -->
-        <div v-if="volumeSupported" class="mt-1 flex items-center gap-3 text-zinc-400">
-          <Volume1 :size="18" aria-hidden="true" />
-          <label for="volume" class="sr-only">Volume</label>
-          <input
-            id="volume"
-            type="range"
-            class="pulse-range"
-            min="0"
-            max="1"
-            step="0.01"
-            :value="volume"
-            :style="{ '--slider-progress': `${volumePercent}%` }"
-            :aria-valuetext="`${Math.round(volumePercent)} percent`"
-            @input="onVolumeInput"
-          />
-          <Volume2 :size="18" aria-hidden="true" />
-        </div>
-
-        <!-- Queue + sleep timer handles -->
-        <div class="mt-1 flex gap-2">
+        <!-- Quick 10-Second Jump Controls -->
+        <div class="mt-2.5 mb-1 flex items-center justify-center gap-6">
           <button
             type="button"
-            class="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-900/80 py-3 text-sm font-semibold text-zinc-300 ring-1 ring-zinc-800 transition active:scale-[0.98]"
+            class="flex items-center gap-1.5 rounded-full bg-zinc-900/70 px-4 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-zinc-800 transition active:scale-90 active:bg-zinc-800 active:text-white disabled:opacity-40"
+            :disabled="!currentTrack"
+            aria-label="Rewind 10 seconds"
+            @click="player.seekBy(-10)"
+          >
+            <RotateCcw :size="15" aria-hidden="true" />
+            <span>-10s</span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full bg-zinc-900/70 px-4 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-zinc-800 transition active:scale-90 active:bg-zinc-800 active:text-white disabled:opacity-40"
+            :disabled="!currentTrack"
+            aria-label="Forward 10 seconds"
+            @click="player.seekBy(10)"
+          >
+            <span>+10s</span>
+            <RotateCw :size="15" aria-hidden="true" />
+          </button>
+        </div>
+
+        <!-- Tiny Clean Queue & Sleep Handles -->
+        <div class="mt-2 flex items-center justify-center gap-2.5 pb-1">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-full bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-400 ring-1 ring-zinc-800/80 transition active:scale-95 active:bg-zinc-800 active:text-zinc-200"
             aria-haspopup="dialog"
             :aria-expanded="playlistOpen"
             @click="openPlaylist"
           >
-            <ListMusic :size="18" aria-hidden="true" />
-            <span class="truncate">Up Next · {{ tracks.length }}</span>
+            <ListMusic :size="13" aria-hidden="true" />
+            <span>Up Next · {{ tracks.length }}</span>
           </button>
           <button
             type="button"
-            class="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold tabular-nums ring-1 transition active:scale-[0.98]"
+            class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium tabular-nums ring-1 transition active:scale-95 active:bg-zinc-800"
             :class="
               sleep.isActive.value
                 ? 'bg-indigo-500/15 text-indigo-300 ring-indigo-500/40'
-                : 'bg-zinc-900/80 text-zinc-300 ring-zinc-800'
+                : 'bg-zinc-900/60 text-zinc-400 ring-zinc-800/80'
             "
             aria-haspopup="dialog"
             :aria-expanded="sleepOpen"
             :aria-label="sleep.isActive.value ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'"
             @click="openSleep"
           >
-            <Moon :size="18" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
-            <span class="truncate">{{ sleepLabel }}</span>
+            <Moon :size="13" :fill="sleep.isActive.value ? 'currentColor' : 'none'" aria-hidden="true" />
+            <span>{{ sleepLabel }}</span>
           </button>
         </div>
       </section>
