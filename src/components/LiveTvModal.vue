@@ -56,6 +56,7 @@ const isPlayingVideo = ref(false)
 const streamError = ref<string | null>(null)
 const isFullscreen = ref(false)
 const showChannelDrawer = ref(true)
+const zappingGuideContainerRef = ref<HTMLDivElement | null>(null)
 
 // Glassmorphic Player UI state
 const areControlsVisible = ref(true)
@@ -469,14 +470,52 @@ function onVideoPlaying(): void {
   resetIdleTimer()
 }
 
+function scrollToActiveChannel(smooth = true): void {
+  if (!props.channel) return
+  nextTick(() => {
+    const container = zappingGuideContainerRef.value
+    if (!container) return
+    const activeEl = container.querySelector<HTMLElement>(`[data-channel-id="${props.channel?.id}"]`)
+    if (activeEl) {
+      const containerWidth = container.clientWidth
+      const elOffsetLeft = activeEl.offsetLeft
+      const elWidth = activeEl.offsetWidth
+      const targetScrollLeft = elOffsetLeft - (containerWidth / 2) + (elWidth / 2)
+
+      container.scrollTo({
+        left: Math.max(0, targetScrollLeft),
+        behavior: smooth ? 'smooth' : 'auto',
+      })
+    }
+  })
+}
+
 watch(
   () => props.channel?.id,
   (newId, oldId) => {
     if (newId && newId !== oldId && props.channel) {
       void loadChannelStream(props.channel)
+      scrollToActiveChannel(true)
     } else if (!newId) {
       cleanUpHls()
     }
+  },
+)
+
+watch(showChannelDrawer, (isOpen) => {
+  if (isOpen) {
+    setTimeout(() => {
+      scrollToActiveChannel(true)
+    }, 60)
+  }
+})
+
+watch(
+  () => props.channels.length,
+  () => {
+    setTimeout(() => {
+      scrollToActiveChannel(false)
+    }, 60)
   },
 )
 
@@ -541,6 +580,9 @@ onMounted(async () => {
   await nextTick()
   if (props.channel) {
     void loadChannelStream(props.channel)
+    setTimeout(() => {
+      scrollToActiveChannel(false)
+    }, 150)
   }
 })
 
@@ -1015,10 +1057,14 @@ onBeforeUnmount(() => {
         <span class="text-[11px] text-zinc-500">Tap channel to watch</span>
       </div>
 
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+      <div
+        ref="zappingGuideContainerRef"
+        class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth"
+      >
         <button
           v-for="ch in channels"
           :key="ch.id"
+          :data-channel-id="ch.id"
           type="button"
           class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
           :class="
@@ -1026,7 +1072,7 @@ onBeforeUnmount(() => {
               ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/40 ring-1 ring-white/20'
               : 'bg-zinc-900/90 text-zinc-300 ring-1 ring-white/5 hover:bg-zinc-800 hover:text-white'
           "
-          @click="emit('selectChannel', ch)"
+          @click="emit('selectChannel', ch); scrollToActiveChannel(true)"
         >
           <img
             v-if="ch.logo"
