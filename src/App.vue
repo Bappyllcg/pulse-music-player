@@ -985,11 +985,17 @@ onBeforeUnmount(() => {
                     {{ getTvChannelLatency(ch.id) }}ms
                   </span>
                   <span
+                    v-else-if="getTvChannelStatus(ch.id) === 'online'"
+                    class="font-mono text-[9px] font-semibold text-emerald-400/90"
+                  >
+                    Good
+                  </span>
+                  <span
                     v-else
                     class="flex items-center gap-1 text-[9px] text-zinc-400 font-medium"
                   >
                     <span class="h-1 w-1 rounded-full bg-indigo-400 animate-ping"></span>
-                    <span>Loading...</span>
+                    <span>Checking...</span>
                   </span>
                 </div>
 

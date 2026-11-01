@@ -453,7 +453,6 @@ const channelHealth = ref<Record<string, ChannelHealthStatus>>({})
 const channelLatency = ref<Record<string, number>>({})
 const channelCache = new Map<TvRegionId, TvChannel[]>()
 
-let activeHealthCheckAbortController: AbortController | null = null
 let saveHealthCacheTimer: number | undefined
 
 function loadHealthCache(): void {
@@ -533,11 +532,12 @@ export interface HealthCheckResult {
 
 /**
  * Checks whether an HLS stream is active and responding, measuring network latency.
- * Fast 1400ms timeout with byte range request skips broken/dead streams immediately.
+ * Simple GET avoids CORS preflight OPTIONS rejection on IPTV servers.
+ * Body download is cancelled immediately after receiving headers to save bandwidth.
  */
 export async function checkChannelHealth(
   channel: TvChannel,
-  timeoutMs = 1400,
+  timeoutMs = 1500,
 ): Promise<HealthCheckResult> {
   const sanitized = sanitizeStreamUrl(channel.url)
   if (!sanitized) {
@@ -551,14 +551,16 @@ export async function checkChannelHealth(
   try {
     const res = await fetch(sanitized, {
       method: 'GET',
-      headers: {
-        Range: 'bytes=0-100',
-      },
       signal: controller.signal,
     })
 
     window.clearTimeout(timeoutId)
-    const latencyMs = Math.round(performance.now() - startTime)
+    const latencyMs = Math.max(10, Math.round(performance.now() - startTime))
+
+    // Immediately cancel the response stream to avoid downloading full video/audio data
+    try {
+      void res.body?.cancel()
+    } catch {}
 
     if (res.ok || res.status === 206 || res.status === 304 || (res.status >= 300 && res.status < 400)) {
       let strength: NetworkStrengthLevel = 'excellent'
@@ -580,53 +582,57 @@ export async function checkChannelHealth(
   }
 }
 
+const inFlightChecks = new Set<string>()
+
 /**
- * Runs a rapid background health check prioritizing the visible relevant channels.
- * Runs 10 concurrent checks and skips dead streams within ~1.2s.
+ * Runs a thorough, high-performance background health check across all channels in the list.
+ * Deduplicates in-flight requests and processes all channels concurrently without truncation.
  */
 export async function runBackgroundHealthCheck(
   targetChannels: TvChannel[],
-  concurrency = 10,
+  concurrency = 12,
 ): Promise<void> {
   if (!targetChannels || targetChannels.length === 0) return
 
-  if (activeHealthCheckAbortController) {
-    activeHealthCheckAbortController.abort()
-  }
+  // Filter channels that still need verification or latency resolution
+  const pending = targetChannels.filter((ch) => {
+    if (inFlightChecks.has(ch.id)) return false
+    const status = channelHealth.value[ch.id]
+    const hasLatency = channelLatency.value[ch.id] !== undefined
+    // Needs check if status is not determined, or if online but has no latency
+    return !status || status === 'unknown' || (status === 'online' && !hasLatency)
+  })
 
-  const controller = new AbortController()
-  activeHealthCheckAbortController = controller
-  const { signal } = controller
-
-  // Check top relevant/visible channels first to make response instant
-  const pending = targetChannels
-    .filter((ch) => {
-      const status = channelHealth.value[ch.id]
-      return !status || status === 'unknown'
-    })
-    .slice(0, 35)
-
-  if (pending.length === 0) {
-    return
-  }
+  if (pending.length === 0) return
 
   isCheckingHealth.value = true
+
+  // Mark all pending channels as in-flight so concurrent calls don't duplicate work
+  for (const ch of pending) {
+    inFlightChecks.add(ch.id)
+  }
 
   let index = 0
 
   async function worker(): Promise<void> {
     while (index < pending.length) {
-      if (signal.aborted) break
       const ch = pending[index++]
       if (!ch) break
 
-      const result = await checkChannelHealth(ch, 1400)
-      if (!signal.aborted) {
+      try {
+        const result = await checkChannelHealth(ch, 1400)
         channelHealth.value[ch.id] = result.status
         if (result.latencyMs !== undefined) {
           channelLatency.value[ch.id] = result.latencyMs
+        } else if (result.status === 'online') {
+          channelLatency.value[ch.id] = 180
         }
         persistHealthCache()
+      } catch {
+        channelHealth.value[ch.id] = 'offline'
+        persistHealthCache()
+      } finally {
+        inFlightChecks.delete(ch.id)
       }
     }
   }
@@ -636,9 +642,8 @@ export async function runBackgroundHealthCheck(
 
   await Promise.allSettled(workers)
 
-  if (activeHealthCheckAbortController === controller) {
+  if (inFlightChecks.size === 0) {
     isCheckingHealth.value = false
-    activeHealthCheckAbortController = null
   }
 }
 
