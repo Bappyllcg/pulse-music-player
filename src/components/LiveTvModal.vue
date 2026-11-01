@@ -65,6 +65,7 @@ const areControlsVisible = ref(true)
 let idleTimeout: number | undefined
 const isMuted = ref(false)
 const volume = ref(1)
+let lastNonZeroVolume = 1
 
 // Aspect Ratio Modes: 'fit' | '16:9' | '4:3' | 'fill'
 export type AspectRatioMode = 'fit' | '16:9' | '4:3' | 'fill'
@@ -106,6 +107,9 @@ const autoSkipCountdown = ref<number | null>(null)
 let autoSkipTimer: number | undefined
 
 let hlsInstance: Hls | null = null
+let nativeMetadataHandler: (() => void) | null = null
+let nativeErrorHandler: (() => void) | null = null
+let lastTotalFrames = 0
 
 const countryInfo = computed(() => {
   const reg = TV_REGIONS.find((r) => r.id === props.channel?.country)
@@ -194,10 +198,31 @@ function cleanUpHls(): void {
   if (zapBannerTimer) window.clearTimeout(zapBannerTimer)
   if (centerActionTimer) window.clearTimeout(centerActionTimer)
   if (statsInterval) window.clearInterval(statsInterval)
+  lastTotalFrames = 0
+
+  const video = videoRef.value
+  if (video) {
+    if (nativeMetadataHandler) {
+      video.removeEventListener('loadedmetadata', nativeMetadataHandler)
+      nativeMetadataHandler = null
+    }
+    if (nativeErrorHandler) {
+      video.removeEventListener('error', nativeErrorHandler)
+      nativeErrorHandler = null
+    }
+  }
 
   if (hlsInstance) {
     hlsInstance.destroy()
     hlsInstance = null
+  }
+
+  if (video) {
+    try {
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+    } catch {}
   }
 }
 
@@ -246,14 +271,27 @@ function selectQuality(index: number): void {
 function toggleMute(): void {
   const video = videoRef.value
   if (!video) return
-  isMuted.value = !isMuted.value
-  video.muted = isMuted.value
+  if (isMuted.value || volume.value === 0) {
+    isMuted.value = false
+    if (volume.value === 0) {
+      volume.value = lastNonZeroVolume > 0 ? lastNonZeroVolume : 1
+    }
+    video.volume = volume.value
+    video.muted = false
+  } else {
+    lastNonZeroVolume = volume.value > 0 ? volume.value : lastNonZeroVolume
+    isMuted.value = true
+    video.muted = true
+  }
   resetIdleTimer()
 }
 
 function onVolumeInput(e: Event): void {
   const val = Number((e.target as HTMLInputElement).value)
   volume.value = val
+  if (val > 0) {
+    lastNonZeroVolume = val
+  }
   const video = videoRef.value
   if (video) {
     video.volume = val
@@ -291,8 +329,10 @@ function updateStats(): void {
   // Frame stats
   if (typeof (video as any).getVideoPlaybackQuality === 'function') {
     const q = (video as any).getVideoPlaybackQuality()
+    const total = q.totalVideoFrames || 0
     statsDroppedFrames.value = q.droppedVideoFrames || 0
-    statsFps.value = Math.round(q.totalVideoFrames > 0 ? 30 : 0)
+    statsFps.value = lastTotalFrames > 0 ? Math.max(0, total - lastTotalFrames) : (total > 0 ? 30 : 0)
+    lastTotalFrames = total
   }
 }
 
@@ -429,29 +469,27 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
     })
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     // Native Safari / iOS HLS
-    video.src = streamUrl
-    video.addEventListener(
-      'loadedmetadata',
-      () => {
-        setChannelStatus(channel.id, 'online')
-        const ping = Math.round(performance.now() - loadStartTime)
-        if (ping > 0 && ping < 6000) {
-          setChannelLatency(channel.id, ping)
-        }
-        void video.play().catch(() => {
-          isMuted.value = true
-          video.muted = true
-          void video.play().catch(() => {})
-        })
-      },
-      { once: true },
-    )
-    video.addEventListener('error', () => {
+    nativeMetadataHandler = () => {
+      setChannelStatus(channel.id, 'online')
+      const ping = Math.round(performance.now() - loadStartTime)
+      if (ping > 0 && ping < 6000) {
+        setChannelLatency(channel.id, ping)
+      }
+      void video.play().catch(() => {
+        isMuted.value = true
+        video.muted = true
+        void video.play().catch(() => {})
+      })
+    }
+    nativeErrorHandler = () => {
       setChannelStatus(channel.id, 'offline')
       streamError.value = 'Unable to stream this channel. Format or CORS error.'
       isBuffering.value = false
       triggerAutoSkip()
-    })
+    }
+    video.addEventListener('loadedmetadata', nativeMetadataHandler, { once: true })
+    video.addEventListener('error', nativeErrorHandler, { once: true })
+    video.src = streamUrl
   } else {
     streamError.value = 'HLS streaming is not supported on this browser.'
     isBuffering.value = false
@@ -527,18 +565,53 @@ watch(
   },
 )
 
+function onFullscreenChange(): void {
+  const doc = document as Document & { webkitFullscreenElement?: Element }
+  isFullscreen.value = !!(doc.fullscreenElement || doc.webkitFullscreenElement)
+}
+
 function toggleFullscreen(): void {
   const container = playerContainerRef.value
-  if (!container) return
+  const video = videoRef.value as (HTMLVideoElement & {
+    webkitEnterFullscreen?: () => void
+    webkitExitFullscreen?: () => void
+    webkitDisplayingFullscreen?: boolean
+  }) | null
+  const doc = document as Document & {
+    webkitFullscreenElement?: Element
+    webkitExitFullscreen?: () => Promise<void>
+  }
 
-  if (!document.fullscreenElement) {
+  if (doc.fullscreenElement || doc.webkitFullscreenElement || video?.webkitDisplayingFullscreen) {
+    if (typeof doc.exitFullscreen === 'function' && doc.fullscreenElement) {
+      void doc.exitFullscreen().then(() => {
+        isFullscreen.value = false
+      }).catch(() => {})
+    } else if (typeof doc.webkitExitFullscreen === 'function') {
+      void doc.webkitExitFullscreen()
+      isFullscreen.value = false
+    } else if (typeof video?.webkitExitFullscreen === 'function') {
+      video.webkitExitFullscreen()
+      isFullscreen.value = false
+    }
+    return
+  }
+
+  if (container && typeof container.requestFullscreen === 'function') {
     void container.requestFullscreen().then(() => {
       isFullscreen.value = true
-    }).catch(() => {})
-  } else {
-    void document.exitFullscreen().then(() => {
-      isFullscreen.value = false
-    }).catch(() => {})
+    }).catch(() => {
+      // Fallback for iPhone / iOS Safari where only <video> supports fullscreen
+      if (typeof video?.webkitEnterFullscreen === 'function') {
+        try {
+          video.webkitEnterFullscreen()
+        } catch {}
+      }
+    })
+  } else if (typeof video?.webkitEnterFullscreen === 'function') {
+    try {
+      video.webkitEnterFullscreen()
+    } catch {}
   }
 }
 
@@ -580,9 +653,8 @@ function onKeydown(e: KeyboardEvent): void {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
-  document.addEventListener('fullscreenchange', () => {
-    isFullscreen.value = !!document.fullscreenElement
-  })
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
 
   // Ensure DOM is ready, then load channel immediately on 1st mount
   await nextTick()
@@ -595,8 +667,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (document.pictureInPictureElement && document.pictureInPictureElement === videoRef.value) {
+    void document.exitPictureInPicture().catch(() => {})
+  }
   cleanUpHls()
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
 })
 </script>
 

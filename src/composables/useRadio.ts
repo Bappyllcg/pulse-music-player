@@ -132,7 +132,7 @@ const DEFAULT_BANGLADESH_STATIONS: RadioStation[] = [
     title: 'Al-Quran Bangla',
     artist: 'Bangladesh • Islamic • 128k',
     duration: 0,
-    src: 'http://66.45.232.131:9994/;stream/1/;',
+    src: 'https://qurango.net/radio/tarateel',
     coverUrl: 'https://www.liveonlineradio.net/wp-content/uploads/2012/03/Bangla-Al-Quran.jpg',
     kind: 'stream',
     createdAt: 1,
@@ -355,9 +355,11 @@ function getStationCover(station: RadioBrowserStation): string {
   )
 }
 
-/** Sanitize stream URLs: upgrade Zeno.fm to HTTPS and strip expired token parameters */
+/** Sanitize stream URLs: upgrade HTTP domains on HTTPS origins, drop raw HTTP IPs on HTTPS, and strip expired Zeno.fm tokens */
 function sanitizeStreamUrl(url: string): string {
   let cleaned = (url || '').trim()
+  if (!cleaned) return ''
+
   if (cleaned.includes('zeno.fm')) {
     cleaned = cleaned.replace(/^http:\/\/stream\.zeno\.fm/, 'https://stream.zeno.fm')
     cleaned = cleaned.replace(/^http:\/\/stream-(\d+)\.zeno\.fm/, 'https://stream-$1.zeno.fm')
@@ -366,6 +368,18 @@ function sanitizeStreamUrl(url: string): string {
       cleaned = cleaned.slice(0, qIndex)
     }
   }
+
+  const isHttpsOrigin =
+    typeof window !== 'undefined' ? window.location.protocol === 'https:' : true
+
+  if (isHttpsOrigin && cleaned.startsWith('http://')) {
+    const isRawIp = /^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(\/|$)/i.test(cleaned)
+    if (isRawIp) {
+      return ''
+    }
+    cleaned = cleaned.replace(/^http:\/\//i, 'https://')
+  }
+
   return cleaned
 }
 
@@ -421,7 +435,8 @@ async function fetchFromRadioBrowser(path: string): Promise<RadioStation[]> {
       const result: RadioStation[] = []
 
       for (const item of list) {
-        const streamUrl = (item.url_resolved || item.url || '').trim()
+        const rawUrl = (item.url_resolved || item.url || '').trim()
+        const streamUrl = sanitizeStreamUrl(rawUrl)
         if (!streamUrl) continue
         const normName = (item.name || '').trim().toLowerCase()
         if (normName && seen.has(normName)) continue
@@ -480,12 +495,36 @@ export async function checkStationHealth(
 
     return { status: 'online', latencyMs, strength: latencyMs < 500 ? 'good' : 'fair' }
   } catch {
+    // Icecast/Shoutcast servers frequently omit CORS headers even when the stream is online
+    // and playable in <audio>. If the request didn't time out, probe with mode: 'no-cors'.
+    if (!controller.signal.aborted) {
+      try {
+        const resOpaque = await fetch(sanitized, {
+          method: 'GET',
+          mode: 'no-cors',
+          signal: controller.signal,
+        })
+        window.clearTimeout(timeoutId)
+        try {
+          void resOpaque.body?.cancel()
+        } catch {}
+        if (resOpaque.type === 'opaque' || resOpaque.ok) {
+          const latencyMs = Math.max(10, Math.round(performance.now() - startTime))
+          const strength: NetworkStrengthLevel =
+            latencyMs < 350 ? 'excellent' : latencyMs < 700 ? 'good' : 'fair'
+          return { status: 'online', latencyMs, strength }
+        }
+      } catch {
+        /* fallback also failed */
+      }
+    }
     window.clearTimeout(timeoutId)
     return { status: 'offline', strength: 'offline' }
   }
 }
 
 const inFlightChecks = new Set<string>()
+let latestRadioRequestId = 0
 
 export async function runBackgroundHealthCheck(
   targetStations: RadioStation[],
@@ -568,13 +607,17 @@ export function useRadio() {
       )
     }
 
-    // 3. Exclude verified offline stations
-    list = list.filter((s) => getStationStatus(s.id) !== 'offline')
+    // 3. Exclude verified offline stations (unless all matching stations are marked offline)
+    const onlineOrUnknown = list.filter((s) => getStationStatus(s.id) !== 'offline')
+    if (onlineOrUnknown.length > 0) {
+      list = onlineOrUnknown
+    }
 
     return list
   })
 
   async function selectRegion(regionId: RadioRegionId, force = false): Promise<RadioStation[]> {
+    const reqId = ++latestRadioRequestId
     activeRegion.value = regionId
     currentRadioSearch.value = ''
 
@@ -585,6 +628,7 @@ export function useRadio() {
       const cached = radioCache.get(regionId)!
       stations.value = cached
       radioError.value = null
+      isLoadingRadio.value = false
       void runBackgroundHealthCheck(cached)
       return cached
     }
@@ -599,6 +643,7 @@ export function useRadio() {
             radioCache.set(regionId, parsed)
             stations.value = parsed
             radioError.value = null
+            isLoadingRadio.value = false
             void runBackgroundHealthCheck(parsed)
             return parsed
           }
@@ -623,6 +668,7 @@ export function useRadio() {
       }
 
       const fetched = await fetchFromRadioBrowser(path)
+      if (reqId !== latestRadioRequestId) return stations.value
       stations.value = fetched.length > 0 ? fetched : (regionId === 'bd' ? DEFAULT_BANGLADESH_STATIONS : [])
       radioCache.set(regionId, stations.value)
       try {
@@ -631,6 +677,7 @@ export function useRadio() {
       void runBackgroundHealthCheck(stations.value)
       return stations.value
     } catch (err) {
+      if (reqId !== latestRadioRequestId) return stations.value
       console.warn('[Pulse] Failed to load radio region:', regionId, err)
       if (stations.value.length === 0) {
         if (regionId === 'bd') {
@@ -643,7 +690,9 @@ export function useRadio() {
       }
       return stations.value
     } finally {
-      isLoadingRadio.value = false
+      if (reqId === latestRadioRequestId) {
+        isLoadingRadio.value = false
+      }
     }
   }
 
@@ -657,6 +706,7 @@ export function useRadio() {
       return selectRegion(activeRegion.value)
     }
 
+    const reqId = ++latestRadioRequestId
     currentRadioSearch.value = clean
     isLoadingRadio.value = true
     radioError.value = null
@@ -670,6 +720,7 @@ export function useRadio() {
         results = await fetchFromRadioBrowser(path)
       }
 
+      if (reqId !== latestRadioRequestId) return stations.value
       stations.value = results
       if (results.length === 0) {
         radioError.value = `No radio stations found for “${clean}”.`
@@ -678,13 +729,16 @@ export function useRadio() {
       }
       return results
     } catch (err) {
+      if (reqId !== latestRadioRequestId) return stations.value
       console.warn('[Pulse] Radio search failed:', err)
       radioError.value = navigator.onLine
         ? 'Radio search request failed. Please try again.'
         : 'You are offline. Connect to internet to search radio stations.'
       return []
     } finally {
-      isLoadingRadio.value = false
+      if (reqId === latestRadioRequestId) {
+        isLoadingRadio.value = false
+      }
     }
   }
 

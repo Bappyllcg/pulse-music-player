@@ -20,6 +20,7 @@ interface StoredSettings {
 interface StoredPlaybackState {
   lastTrackId: string | null
   lastPosition: number
+  lastStreamTrack?: PlayableTrack | null
 }
 
 function loadSettings(): StoredSettings {
@@ -51,17 +52,26 @@ function saveSettings(settings: StoredSettings): void {
 }
 
 function loadStoredState(): StoredPlaybackState {
-  const fallback: StoredPlaybackState = { lastTrackId: null, lastPosition: 0 }
+  const fallback: StoredPlaybackState = { lastTrackId: null, lastPosition: 0, lastStreamTrack: null }
   try {
     const raw = localStorage.getItem(STATE_KEY)
     if (!raw) return fallback
     const parsed = JSON.parse(raw) as Partial<StoredPlaybackState>
+    const validStream =
+      parsed.lastStreamTrack &&
+      typeof parsed.lastStreamTrack === 'object' &&
+      typeof parsed.lastStreamTrack.id === 'string' &&
+      typeof parsed.lastStreamTrack.src === 'string' &&
+      parsed.lastStreamTrack.kind === 'stream'
+        ? parsed.lastStreamTrack
+        : null
     return {
       lastTrackId: typeof parsed.lastTrackId === 'string' ? parsed.lastTrackId : null,
       lastPosition:
         typeof parsed.lastPosition === 'number' && Number.isFinite(parsed.lastPosition) && parsed.lastPosition > 0
           ? parsed.lastPosition
           : 0,
+      lastStreamTrack: validStream,
     }
   } catch {
     return fallback
@@ -151,9 +161,11 @@ function usePlayerInternals() {
     const now = Date.now()
     if (!force && now - lastPersistAt < 2500) return
     lastPersistAt = now
+    const isLiveRadio = currentTrack.value.id.startsWith('radio') || (currentTrack.value.kind === 'stream' && currentTrack.value.duration <= 0)
     saveStoredState({
       lastTrackId: currentTrack.value.id,
-      lastPosition: currentTime.value,
+      lastPosition: isLiveRadio ? 0 : currentTime.value,
+      lastStreamTrack: currentTrack.value.kind === 'stream' ? currentTrack.value : null,
     })
   }
 
@@ -217,6 +229,9 @@ function usePlayerInternals() {
   }
 
   function seek(seconds: number): void {
+    if (!currentTrack.value || currentTrack.value.id.startsWith('radio') || duration.value <= 0) {
+      return
+    }
     const total = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : duration.value
     const target = Math.min(Math.max(seconds, 0), total > 0 ? total : seconds)
     currentTime.value = target
@@ -448,6 +463,10 @@ function usePlayerInternals() {
   }
 
   function syncDuration(): void {
+    if (currentTrack.value?.id.startsWith('radio')) {
+      duration.value = 0
+      return
+    }
     const total = Number.isFinite(audio.duration) ? audio.duration : 0
     if (total > 0) {
       duration.value = total
@@ -551,8 +570,9 @@ function usePlayerInternals() {
 
   // Keep player consistent when library changes (cold load, import, delete).
   watch(
-    () => tracks.value.map((track) => track.id).join('|'),
-    () => {
+    () => [storage.isReady.value, tracks.value.map((track) => track.id).join('|')] as const,
+    ([ready]) => {
+      if (!ready) return
       const list = tracks.value
 
       // Update custom queue if active
@@ -560,6 +580,26 @@ function usePlayerInternals() {
         const idSet = new Set(list.map((t) => t.id))
         customQueue.value = customQueue.value.filter((t) => t.kind === 'stream' || idSet.has(t.id))
         if (customQueue.value.length === 0) customQueue.value = null
+      }
+
+      // Initial cold-start restoration (only runs once after IndexedDB is ready)
+      if (!hasRestoredInitialTrack) {
+        hasRestoredInitialTrack = true
+        const saved = loadStoredState()
+        const localCandidate = saved.lastTrackId ? list.find((t) => t.id === saved.lastTrackId) : null
+        if (localCandidate) {
+          loadTrack(localCandidate, saved.lastPosition)
+          return
+        }
+        if (saved.lastStreamTrack && saved.lastStreamTrack.id === saved.lastTrackId) {
+          const isRadio = saved.lastStreamTrack.id.startsWith('radio') || saved.lastStreamTrack.duration <= 0
+          loadTrack(saved.lastStreamTrack, isRadio ? 0 : saved.lastPosition)
+          return
+        }
+        if (list.length > 0) {
+          loadTrack(list[0], 0)
+        }
+        return
       }
 
       // If user is currently playing an online stream track, do not disrupt it
@@ -574,20 +614,7 @@ function usePlayerInternals() {
         currentTime.value = 0
         duration.value = 0
         activeQueueCleanup()
-        saveStoredState({ lastTrackId: null, lastPosition: 0 })
-        return
-      }
-
-      // Initial cold-start restoration
-      if (!hasRestoredInitialTrack) {
-        hasRestoredInitialTrack = true
-        const saved = loadStoredState()
-        const candidate = saved.lastTrackId ? list.find((t) => t.id === saved.lastTrackId) : null
-        if (candidate) {
-          loadTrack(candidate, saved.lastPosition)
-          return
-        }
-        loadTrack(list[0], 0)
+        saveStoredState({ lastTrackId: null, lastPosition: 0, lastStreamTrack: null })
         return
       }
 
@@ -603,9 +630,10 @@ function usePlayerInternals() {
         if (!ids.has(shuffleHistory[i])) shuffleHistory.splice(i, 1)
       }
 
-      // Advance to adjacent track instead of resetting to #0
-      const nextIdx = Math.min(Math.max(0, lastKnownIndex), list.length - 1)
-      const target = list[nextIdx]
+      // Advance to adjacent track in the active queue instead of resetting to #0
+      const activeList = currentQueue.value.length > 0 ? currentQueue.value : list
+      const nextIdx = Math.min(Math.max(0, lastKnownIndex), activeList.length - 1)
+      const target = activeList[nextIdx]
       if (target) {
         loadTrack(target, 0)
       }

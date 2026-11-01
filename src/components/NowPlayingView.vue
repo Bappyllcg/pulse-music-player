@@ -57,8 +57,14 @@ const emit = defineEmits<{
 const dragOffsetY = ref(0)
 const isDraggingView = ref(false)
 let touchStartY = 0
+let lastNonZeroVolume = 1
 
 function onTouchStart(e: TouchEvent): void {
+  const target = e.target as HTMLElement | null
+  if (target && target.closest('[role="slider"], input[type="range"]')) {
+    isDraggingView.value = false
+    return
+  }
   touchStartY = e.touches[0].clientY
   isDraggingView.value = true
 }
@@ -89,11 +95,19 @@ const currentSourceLabel = computed(() => {
 function toggleMute(): void {
   if (typeof props.volume === 'number') {
     if (props.volume > 0) {
+      lastNonZeroVolume = props.volume
       emit('setVolume', 0)
     } else {
-      emit('setVolume', 1)
+      emit('setVolume', lastNonZeroVolume > 0 ? lastNonZeroVolume : 1)
     }
   }
+}
+
+function onVolumeChange(val: number): void {
+  if (val > 0) {
+    lastNonZeroVolume = val
+  }
+  emit('setVolume', val)
 }
 </script>
 
@@ -304,7 +318,7 @@ function toggleMute(): void {
           class="pulse-range flex-1"
           :style="{ '--slider-progress': `${(volume ?? 1) * 100}%` }"
           aria-label="Volume level"
-          @input="emit('setVolume', Number(($event.target as HTMLInputElement).value))"
+          @input="onVolumeChange(Number(($event.target as HTMLInputElement).value))"
         />
       </div>
 
@@ -328,7 +342,8 @@ function toggleMute(): void {
         <!-- 10s Backward Skip -->
         <button
           type="button"
-          class="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.05] transition-all duration-200 active:scale-90 cursor-pointer"
+          :disabled="!currentTrack || duration <= 0"
+          class="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.05] transition-all duration-200 active:scale-90 cursor-pointer disabled:opacity-35 disabled:pointer-events-none"
           aria-label="Rewind 10 seconds"
           @click="emit('seekBy', -10)"
         >
@@ -388,7 +403,8 @@ function toggleMute(): void {
         <!-- 10s Forward Skip -->
         <button
           type="button"
-          class="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.05] transition-all duration-200 active:scale-90 cursor-pointer"
+          :disabled="!currentTrack || duration <= 0"
+          class="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.05] transition-all duration-200 active:scale-90 cursor-pointer disabled:opacity-35 disabled:pointer-events-none"
           aria-label="Forward 10 seconds"
           @click="emit('seekBy', 10)"
         >

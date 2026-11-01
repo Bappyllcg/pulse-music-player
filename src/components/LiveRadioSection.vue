@@ -41,6 +41,7 @@ const props = defineProps<{
   isLoading: boolean
   error: string | null
   activeLabel: string
+  searchQuery: string
   likedIds: Set<string>
   getStationStatus: (id: string) => RadioHealthStatus
   getStationLatency: (id: string) => number | undefined
@@ -48,6 +49,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (e: 'update:searchQuery', val: string): void
   (e: 'selectRegion', id: RadioRegionId): void
   (e: 'selectCategory', id: RadioCategoryId): void
   (e: 'refresh'): void
@@ -132,6 +134,29 @@ function toggleCountryGrid() {
         >
           <Radio :size="24" />
         </div>
+      </div>
+
+      <!-- Radio Station Search Bar -->
+      <div class="relative mt-4 flex items-center">
+        <Search :size="15" class="pointer-events-none absolute left-3.5 text-slate-400 dark:text-zinc-400" />
+        <input
+          :value="searchQuery"
+          type="search"
+          placeholder="Search radio stations, genres, or cities..."
+          class="w-full rounded-2xl py-2.5 pr-10 pl-10 text-xs font-medium transition focus:outline-none focus:ring-2
+                 bg-white text-slate-900 placeholder-slate-400 border border-slate-200/90 shadow-sm focus:ring-rose-500/30 focus:border-rose-500
+                 dark:bg-black/40 dark:text-white dark:placeholder-zinc-500 dark:border-white/15 dark:focus:ring-rose-500 dark:focus:border-rose-500"
+          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+        />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="absolute right-3 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white transition active:scale-90 cursor-pointer"
+          aria-label="Clear radio search"
+          @click="emit('update:searchQuery', '')"
+        >
+          <X :size="14" />
+        </button>
       </div>
 
       <!-- Country / Region Section inside Hero -->

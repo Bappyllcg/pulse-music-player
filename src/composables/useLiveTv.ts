@@ -583,6 +583,7 @@ export async function checkChannelHealth(
 }
 
 const inFlightChecks = new Set<string>()
+let latestTvRequestId = 0
 
 /**
  * Runs a thorough, high-performance background health check across all channels in the list.
@@ -667,8 +668,11 @@ export function useLiveTv() {
       )
     }
 
-    // 3. Hide Offline Channels
-    list = list.filter((ch) => getChannelStatus(ch.id) !== 'offline')
+    // 3. Hide Offline Channels (unless all matching channels are marked offline)
+    const onlineOrUnknown = list.filter((ch) => getChannelStatus(ch.id) !== 'offline')
+    if (onlineOrUnknown.length > 0) {
+      list = onlineOrUnknown
+    }
 
     return list
   })
@@ -696,6 +700,7 @@ export function useLiveTv() {
   })
 
   async function selectRegion(regionId: TvRegionId, force = false): Promise<TvChannel[]> {
+    const reqId = ++latestTvRequestId
     activeRegion.value = regionId
     activeCategory.value = 'all'
     currentTvSearch.value = ''
@@ -714,6 +719,7 @@ export function useLiveTv() {
       const cached = channelCache.get(regionId)!
       channels.value = cached
       tvError.value = null
+      isLoadingTv.value = false
       void runBackgroundHealthCheck(cached)
       return cached
     }
@@ -737,6 +743,7 @@ export function useLiveTv() {
               channelCache.set(regionId, sanitizedCached)
               channels.value = sanitizedCached
               tvError.value = null
+              isLoadingTv.value = false
               void runBackgroundHealthCheck(sanitizedCached)
               return sanitizedCached
             }
@@ -767,6 +774,7 @@ export function useLiveTv() {
       }
 
       const text = await response.text()
+      if (reqId !== latestTvRequestId) return channels.value
       const parsed = parseM3u(text, regionId)
 
       if (parsed.length > 0) {
@@ -780,6 +788,7 @@ export function useLiveTv() {
 
       return channels.value
     } catch (err) {
+      if (reqId !== latestTvRequestId) return channels.value
       console.warn('[Pulse] Failed to fetch IPTV playlist:', regionId, err)
       if (channels.value.length === 0) {
         tvError.value = navigator.onLine
@@ -788,7 +797,9 @@ export function useLiveTv() {
       }
       return channels.value
     } finally {
-      isLoadingTv.value = false
+      if (reqId === latestTvRequestId) {
+        isLoadingTv.value = false
+      }
     }
   }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AudioLines,
   FolderPlus,
@@ -12,8 +12,9 @@ import AboutModal from './components/AboutModal.vue'
 import BottomNavDock, { type MainNavTab } from './components/BottomNavDock.vue'
 import DiscoverSection from './components/DiscoverSection.vue'
 import LiveRadioSection from './components/LiveRadioSection.vue'
-import LiveTvModal from './components/LiveTvModal.vue'
 import LiveTvSection from './components/LiveTvSection.vue'
+
+const LiveTvModal = defineAsyncComponent(() => import('./components/LiveTvModal.vue'))
 import MiniPlayerBar from './components/MiniPlayerBar.vue'
 import NowPlayingView from './components/NowPlayingView.vue'
 import RemoveConfirmModal from './components/RemoveConfirmModal.vue'
@@ -125,9 +126,14 @@ const librarySearch = ref('')
 const discoverSearch = ref('')
 let discoverDebounceTimer: number | undefined
 let radioDebounceTimer: number | undefined
+let skipNextDiscoverWatch = false
 
 watch(discoverSearch, (newQuery) => {
   window.clearTimeout(discoverDebounceTimer)
+  if (skipNextDiscoverWatch) {
+    skipNextDiscoverWatch = false
+    return
+  }
   discoverDebounceTimer = window.setTimeout(() => {
     void searchOnline(newQuery)
   }, 350)
@@ -176,11 +182,16 @@ watch([activeTvRegion, activeTvCategory], () => {
 })
 
 async function onSelectGenre(genreId: string): Promise<void> {
-  discoverSearch.value = ''
+  if (discoverSearch.value !== '') {
+    skipNextDiscoverWatch = true
+    discoverSearch.value = ''
+  }
+  window.clearTimeout(discoverDebounceTimer)
   await selectGenre(genreId)
 }
 
 async function onSelectRadioRegion(regionId: RadioRegionId): Promise<void> {
+  window.clearTimeout(radioDebounceTimer)
   await selectRadioRegion(regionId)
 }
 
@@ -197,9 +208,8 @@ function onSelectTvCategory(categoryId: TvCategoryId): void {
 }
 
 function onPlayTvChannel(channel: typeof liveTv.channels.value[0]): void {
-  if (player.isPlaying.value) {
-    player.pause()
-  }
+  // Always pause the audio element (including any in-flight stream buffering)
+  player.pause()
   playTvChannel(channel)
 }
 
@@ -229,30 +239,100 @@ const activeTvLabel = computed(() => {
   return `${prefix} • ${cat?.label ?? ''}`
 })
 
-/** Liked track IDs stored in localStorage */
+/** Liked track IDs and cached stream metadata stored in localStorage */
 const likedIds = ref<Set<string>>(new Set())
+const likedStreamTracks = ref<Record<string, PlayableTrack>>({})
 
-function loadLiked(): void {
+/** Recently played timestamps and cached stream metadata stored in localStorage */
+const recentPlayedAt = ref<Record<string, number>>({})
+const recentStreamTracks = ref<Record<string, PlayableTrack>>({})
+
+function loadLikedAndRecent(): void {
   try {
     const raw = localStorage.getItem('pulse:liked')
     if (raw) likedIds.value = new Set(JSON.parse(raw))
-  } catch {
-    /* fallback to empty */
-  }
+  } catch {}
+  try {
+    const rawStreams = localStorage.getItem('pulse:liked_tracks')
+    if (rawStreams) {
+      const parsed = JSON.parse(rawStreams) as Record<string, PlayableTrack>
+      if (parsed && typeof parsed === 'object') likedStreamTracks.value = parsed
+    }
+  } catch {}
+  try {
+    const rawRecent = localStorage.getItem('pulse:recent_history')
+    if (rawRecent) {
+      const parsed = JSON.parse(rawRecent) as Record<string, number>
+      if (parsed && typeof parsed === 'object') recentPlayedAt.value = parsed
+    }
+  } catch {}
+  try {
+    const rawRecentStreams = localStorage.getItem('pulse:recent_tracks')
+    if (rawRecentStreams) {
+      const parsed = JSON.parse(rawRecentStreams) as Record<string, PlayableTrack>
+      if (parsed && typeof parsed === 'object') recentStreamTracks.value = parsed
+    }
+  } catch {}
+}
+
+function findTrackById(id: string): PlayableTrack | undefined {
+  if (currentTrack.value?.id === id) return currentTrack.value
+  return (
+    tracks.value.find((t) => t.id === id) ||
+    onlineTracks.value.find((t) => t.id === id) ||
+    radioStations.value.find((t) => t.id === id) ||
+    likedStreamTracks.value[id] ||
+    recentStreamTracks.value[id]
+  )
 }
 
 function toggleLike(id: string): void {
   if (likedIds.value.has(id)) {
     likedIds.value.delete(id)
+    if (likedStreamTracks.value[id]) {
+      delete likedStreamTracks.value[id]
+    }
   } else {
     likedIds.value.add(id)
+    const found = findTrackById(id)
+    if (found && found.kind === 'stream') {
+      likedStreamTracks.value[id] = { ...found }
+    }
   }
   try {
     localStorage.setItem('pulse:liked', JSON.stringify(Array.from(likedIds.value)))
+    localStorage.setItem('pulse:liked_tracks', JSON.stringify(likedStreamTracks.value))
   } catch {
     /* storage quota/disabled */
   }
 }
+
+function recordRecentPlay(track: PlayableTrack): void {
+  recentPlayedAt.value[track.id] = Date.now()
+  if (track.kind === 'stream') {
+    recentStreamTracks.value[track.id] = { ...track }
+  }
+  try {
+    localStorage.setItem('pulse:recent_history', JSON.stringify(recentPlayedAt.value))
+    localStorage.setItem('pulse:recent_tracks', JSON.stringify(recentStreamTracks.value))
+  } catch {}
+}
+
+watch(
+  [currentTrack, isPlaying],
+  ([track, playing]) => {
+    if (track && playing) {
+      recordRecentPlay(track)
+    }
+  },
+)
+
+watch(currentTrack, (track) => {
+  if (!track && activeTab.value === 'player') {
+    activeTab.value = 'library'
+    playlistOpen.value = false
+  }
+})
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const menuOpen = ref(false)
@@ -271,10 +351,35 @@ const filteredLibraryTracks = computed(() => {
   let list = tracks.value
 
   if (selectedLibraryFilter.value === 'liked') {
-    const allAvailable = [...tracks.value, ...onlineTracks.value, ...radioStations.value]
-    list = allAvailable.filter((t) => likedIds.value.has(t.id))
+    const combined = [
+      ...tracks.value,
+      ...onlineTracks.value,
+      ...radioStations.value,
+      ...Object.values(likedStreamTracks.value),
+    ]
+    const seen = new Set<string>()
+    list = combined.filter((t) => {
+      if (!likedIds.value.has(t.id) || seen.has(t.id)) return false
+      seen.add(t.id)
+      return true
+    })
   } else if (selectedLibraryFilter.value === 'recent') {
-    list = [...tracks.value].sort((a, b) => b.createdAt - a.createdAt)
+    const combined = [
+      ...tracks.value,
+      ...Object.values(recentStreamTracks.value),
+    ]
+    const seen = new Set<string>()
+    const deduped = combined.filter((t) => {
+      if (seen.has(t.id)) return false
+      seen.add(t.id)
+      return true
+    })
+    const playedTracks = deduped.filter((t) => (recentPlayedAt.value[t.id] ?? 0) > 0)
+    if (playedTracks.length > 0) {
+      list = playedTracks.sort((a, b) => (recentPlayedAt.value[b.id] ?? 0) - (recentPlayedAt.value[a.id] ?? 0))
+    } else {
+      list = [...tracks.value].sort((a, b) => b.createdAt - a.createdAt)
+    }
   }
 
   if (librarySearch.value.trim()) {
@@ -318,10 +423,7 @@ function openFilePicker(): void {
   fileInput.value?.click()
 }
 
-async function onFilesSelected(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const files = input.files ? Array.from(input.files) : []
-  input.value = ''
+async function importFiles(files: File[]): Promise<void> {
   if (files.length === 0) return
 
   try {
@@ -344,6 +446,13 @@ async function onFilesSelected(event: Event): Promise<void> {
   }
 }
 
+async function onFilesSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  input.value = ''
+  await importFiles(files)
+}
+
 const trackToRemove = ref<{ id: string; title: string } | null>(null)
 
 function promptRemoveTrack(id: string, title: string): void {
@@ -357,6 +466,13 @@ async function confirmRemoveTrack(): Promise<void> {
   try {
     await storage.deleteTrack(id)
     likedIds.value.delete(id)
+    delete likedStreamTracks.value[id]
+    delete recentPlayedAt.value[id]
+    delete recentStreamTracks.value[id]
+    try {
+      localStorage.setItem('pulse:liked', JSON.stringify(Array.from(likedIds.value)))
+      localStorage.setItem('pulse:recent_history', JSON.stringify(recentPlayedAt.value))
+    } catch {}
     showNotice(`Removed “${title}” from library`)
   } catch (error) {
     console.error('[Pulse] Remove failed:', error)
@@ -368,33 +484,35 @@ function cancelRemoveTrack(): void {
   trackToRemove.value = null
 }
 
+function syncQueueForContext(track: PlayableTrack): void {
+  if (activeMainTab.value === 'library') {
+    player.setQueue(filteredLibraryTracks.value)
+  } else if (track.id.startsWith('jamendo') || activeMainTab.value === 'discover') {
+    player.setQueue(onlineTracks.value)
+  } else if (track.id.startsWith('radio') || track.duration <= 0 || activeMainTab.value === 'radio') {
+    player.setQueue(filteredRadioStations.value)
+  } else {
+    player.setQueue(filteredLibraryTracks.value)
+  }
+}
+
 function playTrackAndShow(track: PlayableTrack): void {
+  recordRecentPlay(track)
   if (player.currentTrack.value?.id === track.id) {
     if (!player.isPlaying.value) {
       player.play()
     }
   } else {
-    if (track.id.startsWith('jamendo')) {
-      player.setQueue(onlineTracks.value)
-    } else if (track.id.startsWith('radio') || track.duration <= 0) {
-      player.setQueue(filteredRadioStations.value)
-    } else {
-      player.setQueue(filteredLibraryTracks.value)
-    }
+    syncQueueForContext(track)
     player.selectTrack(track)
   }
   activeTab.value = 'player'
 }
 
 function toggleTrackPlayback(track: PlayableTrack): void {
+  recordRecentPlay(track)
   if (player.currentTrack.value?.id !== track.id) {
-    if (track.id.startsWith('jamendo')) {
-      player.setQueue(onlineTracks.value)
-    } else if (track.id.startsWith('radio') || track.duration <= 0) {
-      player.setQueue(filteredRadioStations.value)
-    } else {
-      player.setQueue(filteredLibraryTracks.value)
-    }
+    syncQueueForContext(track)
   }
   player.selectTrack(track)
 }
@@ -466,15 +584,23 @@ function closeSheets(): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  // Ignore key shortcuts if focused on text input
-  const activeElement = document.activeElement
-  const isInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')
+  // When Live TV Cinema Modal is open, delegate all keyboard shortcuts to LiveTvModal
+  if (activePlayingChannel.value) return
+
+  const activeElement = document.activeElement as HTMLElement | null
+  const tagName = activeElement?.tagName ?? ''
+  const isTextInput =
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    tagName === 'SELECT' ||
+    activeElement?.isContentEditable === true
+  const isInteractiveControl =
+    isTextInput ||
+    tagName === 'BUTTON' ||
+    tagName === 'A' ||
+    activeElement?.getAttribute('role') === 'slider'
 
   if (event.key === 'Escape') {
-    if (activeTab.value === 'player') {
-      activeTab.value = 'library'
-      return
-    }
     if (menuOpen.value || aboutOpen.value || settingsOpen.value || playlistOpen.value || sleepOpen.value) {
       closeSheets()
       return
@@ -483,16 +609,39 @@ function onKeydown(event: KeyboardEvent): void {
       cancelRemoveTrack()
       return
     }
+    if (activeTab.value === 'player') {
+      activeTab.value = 'library'
+      return
+    }
   }
 
-  if (!isInput && event.code === 'Space') {
+  if (!isInteractiveControl && event.code === 'Space') {
     event.preventDefault()
     player.togglePlay()
+    return
+  }
+
+  if (!isInteractiveControl && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    if (currentTrack.value && duration.value > 0) {
+      event.preventDefault()
+      player.seekBy(event.key === 'ArrowLeft' ? -5 : 5)
+    }
+    return
+  }
+
+  if (!isTextInput && event.key === '/') {
+    if (activeTab.value === 'library') {
+      const searchInput = document.querySelector<HTMLInputElement>('main input[type="search"]')
+      if (searchInput) {
+        event.preventDefault()
+        searchInput.focus()
+      }
+    }
   }
 }
 
 onMounted(async () => {
-  loadLiked()
+  loadLikedAndRecent()
   window.addEventListener('keydown', onKeydown)
   await storage.getAllTracks()
 })
@@ -639,6 +788,7 @@ onBeforeUnmount(() => {
           @toggle-like="toggleLike"
           @remove-track="promptRemoveTrack"
           @open-file-picker="openFilePicker"
+          @drop-files="importFiles"
           @shuffle-all="shuffleAllLibrary"
           @switch-to-discover="switchMainTab('discover')"
         />
@@ -676,10 +826,12 @@ onBeforeUnmount(() => {
           :is-loading="isLoadingRadio"
           :error="radioError"
           :active-label="activeRadioLabel"
+          :search-query="currentRadioSearch"
           :liked-ids="likedIds"
           :get-station-status="getRadioStationStatus"
           :get-station-latency="getRadioStationLatency"
           :get-network-strength="getRadioNetworkStrength"
+          @update:search-query="currentRadioSearch = $event"
           @select-region="onSelectRadioRegion"
           @select-category="onSelectRadioCategory"
           @refresh="fetchRadioStations(true)"
@@ -700,9 +852,11 @@ onBeforeUnmount(() => {
           :is-loading="isLoadingTv"
           :error="tvError"
           :active-label="activeTvLabel"
+          :search-query="currentTvSearch"
           :get-channel-status="getTvChannelStatus"
           :get-channel-latency="getTvChannelLatency"
           :get-network-strength="getTvNetworkStrength"
+          @update:search-query="currentTvSearch = $event"
           @select-region="onSelectTvRegion"
           @select-category="onSelectTvCategory"
           @refresh="selectTvRegion(activeTvRegion, true)"
@@ -809,6 +963,7 @@ onBeforeUnmount(() => {
       :active-selection="sleep.selection.value"
       :is-active="sleep.isActive.value"
       :remaining-formatted="sleepRemainingFormatted"
+      :is-live-stream="Boolean(currentTrack && (currentTrack.id.startsWith('radio') || currentTrack.duration <= 0))"
       @close="sleepOpen = false"
       @choose-minutes="chooseSleepMinutes"
       @choose-end-of-track="chooseSleepEndOfTrack"

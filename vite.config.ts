@@ -39,8 +39,27 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pulse-google-fonts',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+        ],
       },
     }),
   ],
+  build: {
+    chunkSizeWarningLimit: 650,
+  },
 })
 

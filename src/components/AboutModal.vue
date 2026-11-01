@@ -100,7 +100,24 @@ async function checkForUpdate(): Promise<void> {
   }
 }
 
-function applyUpdate(): void {
+async function applyUpdate(): Promise<void> {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration()
+      const worker = registration?.installing || registration?.waiting
+      if (worker && worker.state !== 'activated') {
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 1500)
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'activated' || worker.state === 'redundant') {
+              window.clearTimeout(timeout)
+              resolve()
+            }
+          })
+        })
+      }
+    }
+  } catch {}
   window.location.reload()
 }
 

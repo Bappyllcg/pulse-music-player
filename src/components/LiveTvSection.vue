@@ -37,12 +37,14 @@ const props = defineProps<{
   isLoading: boolean
   error: string | null
   activeLabel: string
+  searchQuery: string
   getChannelStatus: (id: string) => ChannelHealthStatus
   getChannelLatency: (id: string) => number | undefined
   getNetworkStrength: (id: string) => NetworkStrengthLevel
 }>()
 
 const emit = defineEmits<{
+  (e: 'update:searchQuery', val: string): void
   (e: 'selectRegion', id: TvRegionId): void
   (e: 'selectCategory', id: TvCategoryId): void
   (e: 'refresh'): void
@@ -125,6 +127,29 @@ function toggleCountryGrid() {
         >
           <Tv :size="24" />
         </div>
+      </div>
+
+      <!-- TV Channel Search Bar -->
+      <div class="relative mt-4 flex items-center">
+        <Search :size="15" class="pointer-events-none absolute left-3.5 text-slate-400 dark:text-zinc-400" />
+        <input
+          :value="searchQuery"
+          type="search"
+          placeholder="Filter channels, categories, or HD/1080p..."
+          class="w-full rounded-2xl py-2.5 pr-10 pl-10 text-xs font-medium transition focus:outline-none focus:ring-2
+                 bg-white text-slate-900 placeholder-slate-400 border border-slate-200/90 shadow-sm focus:ring-amber-500/30 focus:border-amber-500
+                 dark:bg-black/40 dark:text-white dark:placeholder-zinc-500 dark:border-white/15 dark:focus:ring-amber-500 dark:focus:border-amber-500"
+          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+        />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="absolute right-3 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white transition active:scale-90 cursor-pointer"
+          aria-label="Clear TV search"
+          @click="emit('update:searchQuery', '')"
+        >
+          <X :size="14" />
+        </button>
       </div>
 
       <!-- Country / Region Section inside Hero -->

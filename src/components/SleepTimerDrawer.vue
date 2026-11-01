@@ -8,6 +8,7 @@ defineProps<{
   activeSelection: number | 'track' | null
   isActive: boolean
   remainingFormatted?: string
+  isLiveStream?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -129,7 +130,8 @@ function onSleepTouchEnd(): void {
         <li>
           <button
             type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:scale-[0.99] cursor-pointer border"
+            :disabled="isLiveStream"
+            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:scale-[0.99] cursor-pointer border disabled:opacity-40 disabled:pointer-events-none"
             :class="
               activeSelection === 'track'
                 ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-md ring-2 ring-indigo-500/20 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-500/50 dark:shadow-indigo-950/30 font-bold'
@@ -137,7 +139,12 @@ function onSleepTouchEnd(): void {
             "
             @click="emit('chooseEndOfTrack')"
           >
-            <span>End of current track</span>
+            <div>
+              <span>End of current track</span>
+              <span v-if="isLiveStream" class="ml-1.5 text-[11px] font-normal text-slate-400 dark:text-zinc-500">
+                (Unavailable on live radio)
+              </span>
+            </div>
             <Check v-if="activeSelection === 'track'" :size="18" class="text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
           </button>
         </li>

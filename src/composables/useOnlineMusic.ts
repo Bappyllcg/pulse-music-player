@@ -53,6 +53,7 @@ const currentOnlineSearch = ref('')
 
 // In-memory cache for genre queries
 const genreCache = new Map<string, PlayableTrack[]>()
+let latestRequestId = 0
 
 function toPlayableTrack(item: JamendoTrackItem): PlayableTrack {
   return {
@@ -69,13 +70,19 @@ function toPlayableTrack(item: JamendoTrackItem): PlayableTrack {
 
 async function queryJamendo(paramString: string): Promise<PlayableTrack[]> {
   const url = `${BASE_URL}?client_id=${CLIENT_ID}&format=json&limit=20&${paramString}`
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Jamendo API responded with status ${response.status}`)
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), 8000)
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`Jamendo API responded with status ${response.status}`)
+    }
+    const data = (await response.json()) as JamendoResponse
+    if (!data.results) return []
+    return data.results.map(toPlayableTrack)
+  } finally {
+    window.clearTimeout(timeoutId)
   }
-  const data = (await response.json()) as JamendoResponse
-  if (!data.results) return []
-  return data.results.map(toPlayableTrack)
 }
 
 /**
@@ -118,6 +125,7 @@ async function searchJamendo(query: string): Promise<PlayableTrack[]> {
 
 export function useOnlineMusic() {
   async function selectGenre(genreId: string, force = false): Promise<PlayableTrack[]> {
+    const reqId = ++latestRequestId
     activeGenreId.value = genreId
     currentOnlineSearch.value = ''
 
@@ -126,6 +134,7 @@ export function useOnlineMusic() {
       const cached = genreCache.get(genreId)!
       onlineTracks.value = cached
       onlineError.value = null
+      isLoadingOnline.value = false
       return cached
     }
 
@@ -139,6 +148,7 @@ export function useOnlineMusic() {
             genreCache.set(genreId, parsed)
             onlineTracks.value = parsed
             onlineError.value = null
+            isLoadingOnline.value = false
             return parsed
           }
         }
@@ -151,6 +161,7 @@ export function useOnlineMusic() {
 
     try {
       const tracks = await searchJamendo(genre.tag)
+      if (reqId !== latestRequestId) return onlineTracks.value
       onlineTracks.value = tracks
       genreCache.set(genreId, tracks)
       try {
@@ -158,13 +169,16 @@ export function useOnlineMusic() {
       } catch {}
       return tracks
     } catch (err) {
+      if (reqId !== latestRequestId) return onlineTracks.value
       console.warn('[Pulse] Failed to load genre:', genreId, err)
       onlineError.value = navigator.onLine
         ? 'Could not connect to online music stream.'
         : 'You are offline. Connect to internet to stream online music.'
       return onlineTracks.value
     } finally {
-      isLoadingOnline.value = false
+      if (reqId === latestRequestId) {
+        isLoadingOnline.value = false
+      }
     }
   }
 
@@ -174,25 +188,30 @@ export function useOnlineMusic() {
       return selectGenre(activeGenreId.value)
     }
 
+    const reqId = ++latestRequestId
     currentOnlineSearch.value = clean
     isLoadingOnline.value = true
     onlineError.value = null
 
     try {
       const tracks = await searchJamendo(clean)
+      if (reqId !== latestRequestId) return onlineTracks.value
       onlineTracks.value = tracks
       if (tracks.length === 0) {
         onlineError.value = `No online tracks found for “${clean}”. Try another keyword.`
       }
       return tracks
     } catch (err) {
+      if (reqId !== latestRequestId) return onlineTracks.value
       console.warn('[Pulse] Online search failed:', err)
       onlineError.value = navigator.onLine
         ? 'Search request failed. Please try again.'
         : 'You are offline. Connect to internet to search online music.'
       return []
     } finally {
-      isLoadingOnline.value = false
+      if (reqId === latestRequestId) {
+        isLoadingOnline.value = false
+      }
     }
   }
 

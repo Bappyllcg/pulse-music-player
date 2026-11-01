@@ -288,16 +288,36 @@ function readDuration(url: string): Promise<number | null> {
   })
 }
 
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(/[<>&'"]/g, (ch) => {
+    switch (ch) {
+      case '<':
+        return '&lt;'
+      case '>':
+        return '&gt;'
+      case '&':
+        return '&amp;'
+      case '\'':
+        return '&apos;'
+      case '"':
+        return '&quot;'
+      default:
+        return ch
+    }
+  })
+}
+
 /**
  * Compact, lightweight SVG gradient vector artwork (~350 bytes data URL)
- * Replacing heavy 50KB PNG canvas data URLs for ultra-fast storage and crisp retina rendering.
+ * Replacing heavy 50KB PNG data URLs for ultra-fast storage and crisp retina rendering.
  */
 function createCover(seed: string, label: string): string {
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
   const hue = hash % 360
   const hue2 = (hue + 55) % 360
-  const initial = (label.trim().charAt(0) || '♪').toUpperCase()
+  const rawInitial = (label.trim().charAt(0) || '♪').toUpperCase()
+  const initial = escapeXml(rawInitial)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="hsl(${hue},75%,52%)"/><stop offset="100%" stop-color="hsl(${hue2},70%,22%)"/></linearGradient></defs><rect width="512" height="512" fill="url(#g)"/><circle cx="400" cy="120" r="170" fill="white" fill-opacity="0.1"/><circle cx="90" cy="460" r="210" fill="black" fill-opacity="0.18"/><text x="256" y="295" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif" font-weight="700" font-size="240" fill="white" fill-opacity="0.95" text-anchor="middle" dominant-baseline="middle">${initial}</text></svg>`
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
@@ -418,6 +438,11 @@ export function useAudioStorage() {
           await putRecord(record)
         } catch (error) {
           URL.revokeObjectURL(url)
+          const leakedCover = objectUrls.get(id + '_cover')
+          if (leakedCover) {
+            URL.revokeObjectURL(leakedCover)
+            objectUrls.delete(id + '_cover')
+          }
           throw error
         }
 
