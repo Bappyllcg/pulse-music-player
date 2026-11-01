@@ -8,6 +8,7 @@ import {
   Heart,
   ListMusic,
   Maximize2,
+  MinusCircle,
   Moon,
   Music,
   Pause,
@@ -22,7 +23,6 @@ import {
   SkipBack,
   SkipForward,
   Sparkles,
-  Trash2,
   X,
 } from 'lucide-vue-next'
 import MarqueeText from './components/MarqueeText.vue'
@@ -173,13 +173,19 @@ async function onFilesSelected(event: Event): Promise<void> {
 }
 
 async function removeTrack(id: string, title: string): Promise<void> {
-  if (!window.confirm(`Delete “${title}” from your library?`)) return
+  if (
+    !window.confirm(
+      `Remove “${title}” from your playlist?\n\n(Your original audio file on your device remains safe and will not be deleted.)`,
+    )
+  )
+    return
   try {
     await storage.deleteTrack(id)
     likedIds.value.delete(id)
+    showNotice(`Removed “${title}” from playlist`)
   } catch (error) {
-    console.error('[Pulse] Delete failed:', error)
-    showNotice('Could not delete this track.')
+    console.error('[Pulse] Remove failed:', error)
+    showNotice('Could not remove this track.')
   }
 }
 
@@ -620,15 +626,16 @@ onBeforeUnmount(() => {
                   <Play v-else :size="15" fill="currentColor" class="translate-x-0.5" />
                 </button>
 
-                <!-- Delete button for local files -->
+                <!-- Remove button for local files -->
                 <button
                   v-if="track.kind === 'local'"
                   type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 opacity-60 transition active:scale-90 active:text-red-400 hover:opacity-100"
-                  :aria-label="`Delete ${track.title}`"
+                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 opacity-60 transition active:scale-90 active:text-zinc-200 hover:opacity-100 hover:text-zinc-300"
+                  :aria-label="`Remove ${track.title} from playlist`"
+                  title="Remove from playlist"
                   @click.stop="removeTrack(track.id, track.title)"
                 >
-                  <Trash2 :size="14" />
+                  <MinusCircle :size="15" />
                 </button>
               </div>
             </li>
@@ -1068,11 +1075,12 @@ onBeforeUnmount(() => {
             <button
               v-if="track.kind === 'local'"
               type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition active:scale-90 active:text-red-400"
-              :aria-label="`Delete ${track.title}`"
+              class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition active:scale-90 active:text-zinc-200 hover:text-zinc-300"
+              :aria-label="`Remove ${track.title} from playlist`"
+              title="Remove from playlist"
               @click="removeTrack(track.id, track.title)"
             >
-              <Trash2 :size="15" />
+              <MinusCircle :size="16" />
             </button>
           </div>
         </li>

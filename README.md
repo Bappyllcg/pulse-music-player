@@ -55,8 +55,8 @@ Pulse is a Progressive Web App (PWA) that installs directly from the web without
 - If your phone is locked, control playback directly using your phone's lock screen or headphones buttons.
 
 ### 3. Managing Your Library ("Up Next")
-- Tap the **Up Next** button at the bottom of the screen to view your active playlist.
-- To delete a song, tap the **Trash icon** (🗑️) next to the track title.
+- Tap the **Up Next** button at the top of the Now Playing screen to view your active playlist.
+- To remove a song, tap the **Remove icon** (⊖) next to the track title. *(This only removes it from Pulse — your original audio file on your device remains completely safe and untouched).*
 
 ### 4. Sleep Timer
 - Tap the **🌙 Sleep** button next to *Up Next*.
