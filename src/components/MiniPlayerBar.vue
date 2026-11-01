@@ -18,7 +18,8 @@ const emit = defineEmits<{
 
 <template>
   <div
-    class="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+4.75rem)] z-20 mx-auto max-w-lg"
+    class="fixed inset-x-3 z-20 mx-auto max-w-lg"
+    style="bottom: calc(max(env(safe-area-inset-bottom, 0px), 4px) + 3.15rem);"
   >
     <div
       class="glass-mini-player relative flex flex-col overflow-hidden rounded-2xl p-2.5 shadow-2xl transition-all duration-200 active:scale-[0.99] cursor-pointer"

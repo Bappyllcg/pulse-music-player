@@ -767,8 +767,8 @@ onBeforeUnmount(() => {
         class="flex-1 overflow-y-auto px-5"
         :class="[
           currentTrack && activeMainTab !== 'tv' && !activePlayingChannel
-            ? 'pb-36'
-            : 'pb-24'
+            ? 'pb-32'
+            : 'pb-16'
         ]"
       >
         <!-- 1. Library Pillar -->
@@ -864,7 +864,7 @@ onBeforeUnmount(() => {
         />
       </main>
 
-      <!-- Floating Mini Player Bar (Docked smoothly above Bottom Navigation Dock) -->
+      <!-- Mini Player Bar (Docked smoothly above Fixed Bottom Navigation) -->
       <MiniPlayerBar
         v-if="currentTrack && activeMainTab !== 'tv' && !activePlayingChannel"
         :current-track="currentTrack"
@@ -876,7 +876,7 @@ onBeforeUnmount(() => {
         @expand="activeTab = 'player'"
       />
 
-      <!-- Floating Glassmorphic Bottom Navigation Dock -->
+      <!-- Fixed Bottom Navigation Bar (Solid, Edge-to-Edge, Non-floating) -->
       <BottomNavDock
         :active-tab="activeMainTab"
         :local-count="localCount"

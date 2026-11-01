@@ -162,7 +162,7 @@ function cancelAutoSkip(): void {
 
 function triggerAutoSkip(): void {
   cancelAutoSkip()
-  autoSkipCountdown.value = 2
+  autoSkipCountdown.value = 6
   autoSkipTimer = window.setInterval(() => {
     if (autoSkipCountdown.value === null) {
       cancelAutoSkip()
@@ -241,6 +241,22 @@ function togglePlayPause(): void {
     isPlayingVideo.value = false
     triggerCenterAction('pause')
     areControlsVisible.value = true
+  }
+}
+
+function toggleControls(e?: MouseEvent | TouchEvent): void {
+  if (e) {
+    const target = e.target as HTMLElement | null
+    if (target?.closest('button') || target?.closest('input') || target?.closest('.menu-dropdown')) {
+      return
+    }
+  }
+  areControlsVisible.value = !areControlsVisible.value
+  if (areControlsVisible.value) {
+    resetIdleTimer()
+  } else if (idleTimeout) {
+    window.clearTimeout(idleTimeout)
+    idleTimeout = undefined
   }
 }
 
@@ -687,7 +703,7 @@ onBeforeUnmount(() => {
   >
     <!-- Top Pro Glassmorphic Header -->
     <header
-      class="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent transition-opacity duration-300"
+      class="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.6rem)] bg-gradient-to-b from-black/95 via-black/70 to-transparent transition-opacity duration-300"
       :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
     >
       <!-- Channel Identity -->
@@ -861,11 +877,11 @@ onBeforeUnmount(() => {
         <!-- Close Player -->
         <button
           type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:bg-rose-600 hover:text-white active:scale-95 transition backdrop-blur-md"
+          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/90 text-white ring-1 ring-white/20 hover:bg-rose-600 hover:text-white active:scale-90 transition backdrop-blur-md cursor-pointer shrink-0 shadow-lg"
           title="Close TV Player (Esc)"
-          @click="emit('close')"
+          @click.stop="emit('close')"
         >
-          <X :size="18" />
+          <X :size="20" />
         </button>
       </div>
     </header>
@@ -873,7 +889,8 @@ onBeforeUnmount(() => {
     <!-- Main Screen Stage Area -->
     <div
       class="relative flex-1 bg-black flex items-center justify-center overflow-hidden cursor-pointer"
-      @click="togglePlayPause"
+      @click="toggleControls"
+      @dblclick="toggleFullscreen"
     >
       <!-- HTML5 Video Component with Pro Engine Settings -->
       <video
@@ -888,6 +905,27 @@ onBeforeUnmount(() => {
         @playing="onVideoPlaying"
         @pause="isPlayingVideo = false"
       ></video>
+
+      <!-- Prominent Center Play/Pause button on controls visibility -->
+      <transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="scale-75 opacity-0"
+        enter-to-class="scale-100 opacity-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="scale-100 opacity-100"
+        leave-to-class="scale-75 opacity-0"
+      >
+        <button
+          v-if="areControlsVisible || !isPlayingVideo"
+          type="button"
+          class="absolute z-20 flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md ring-1 ring-white/25 shadow-2xl active:scale-90 transition hover:bg-black/80 hover:scale-105 cursor-pointer"
+          :title="isPlayingVideo ? 'Pause' : 'Play'"
+          @click.stop="togglePlayPause"
+        >
+          <Pause v-if="isPlayingVideo" :size="30" fill="currentColor" />
+          <Play v-else :size="30" fill="currentColor" class="translate-x-0.5" />
+        </button>
+      </transition>
 
       <!-- Center Screen Action Ripple Indicator -->
       <transition
@@ -1037,8 +1075,8 @@ onBeforeUnmount(() => {
       <!-- Quick Zapping Floating Navigation Buttons -->
       <button
         type="button"
-        class="group absolute left-4 top-1/2 -translate-y-1/2 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/80 ring-1 ring-white/10 backdrop-blur-md transition hover:bg-black/90 hover:scale-105 hover:text-white active:scale-95 shadow-xl"
-        :class="areControlsVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'"
+        class="group absolute left-4 top-1/2 -translate-y-1/2 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/80 ring-1 ring-white/10 backdrop-blur-md transition hover:bg-black/90 hover:scale-105 hover:text-white active:scale-95 shadow-xl cursor-pointer"
+        :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
         title="Previous Channel (Left Arrow)"
         @click.stop="emit('prev')"
       >
@@ -1047,8 +1085,8 @@ onBeforeUnmount(() => {
 
       <button
         type="button"
-        class="group absolute right-4 top-1/2 -translate-y-1/2 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/80 ring-1 ring-white/10 backdrop-blur-md transition hover:bg-black/90 hover:scale-105 hover:text-white active:scale-95 shadow-xl"
-        :class="areControlsVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'"
+        class="group absolute right-4 top-1/2 -translate-y-1/2 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/80 ring-1 ring-white/10 backdrop-blur-md transition hover:bg-black/90 hover:scale-105 hover:text-white active:scale-95 shadow-xl cursor-pointer"
+        :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
         title="Next Channel (Right Arrow)"
         @click.stop="emit('next')"
       >
@@ -1056,48 +1094,51 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- Bottom Pro Player Cinema Bar -->
+    <!-- Unified Bottom Control & Zapping Stack -->
     <div
-      class="absolute bottom-0 inset-x-0 z-30 transition-opacity duration-300"
-      :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
+      class="absolute bottom-0 inset-x-0 z-30 flex flex-col pointer-events-none"
       @click.stop
     >
-      <div class="bg-gradient-to-t from-black/95 via-black/80 to-transparent px-4 pb-3 pt-6 backdrop-blur-md">
-        <div class="flex items-center justify-between gap-4">
+      <!-- 1. Player Cinema Controls Bar (Directly Above Zapping Guide) -->
+      <div
+        class="pointer-events-auto transition-all duration-300 bg-gradient-to-t from-black/95 via-black/85 to-transparent px-4 pb-2.5 pt-6 backdrop-blur-md"
+        :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-3 pointer-events-none'"
+      >
+        <div class="flex items-center justify-between gap-3">
           <!-- Playback & Live Sync Controls -->
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2.5">
             <!-- Play / Pause -->
             <button
               type="button"
-              class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-lg active:scale-95 transition hover:bg-zinc-200"
+              class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-950 shadow-lg active:scale-95 transition hover:bg-zinc-200 cursor-pointer shrink-0"
               :title="isPlayingVideo ? 'Pause (Space)' : 'Play (Space)'"
               @click="togglePlayPause"
             >
-              <Pause v-if="isPlayingVideo" :size="18" fill="currentColor" />
-              <Play v-else :size="18" fill="currentColor" class="translate-x-0.5" />
+              <Pause v-if="isPlayingVideo" :size="16" fill="currentColor" />
+              <Play v-else :size="16" fill="currentColor" class="translate-x-0.5" />
             </button>
 
             <!-- Jump to Live Edge -->
             <button
               type="button"
-              class="flex items-center gap-1.5 rounded-full bg-rose-500/20 px-3 py-1 text-xs font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/30 hover:bg-rose-500/30 transition active:scale-95"
+              class="flex items-center gap-1.5 rounded-full bg-rose-500/20 px-2.5 py-1 text-[11px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/30 hover:bg-rose-500/30 transition active:scale-95 cursor-pointer shrink-0"
               title="Jump to live edge"
               @click="jumpToLiveEdge"
             >
-              <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
-              <span>LIVE EDGE</span>
+              <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+              <span>LIVE</span>
             </button>
 
-            <!-- Volume Control & Slider -->
-            <div class="group flex items-center gap-2">
+            <!-- Volume Control & Slider (Desktop) / Mute (Mobile) -->
+            <div class="group flex items-center gap-1.5">
               <button
                 type="button"
-                class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 hover:text-white transition hover:bg-white/10"
+                class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 hover:text-white transition hover:bg-white/10 cursor-pointer"
                 :title="isMuted ? 'Unmute (M)' : 'Mute (M)'"
                 @click="toggleMute"
               >
-                <VolumeX v-if="isMuted || volume === 0" :size="18" />
-                <Volume2 v-else :size="18" />
+                <VolumeX v-if="isMuted || volume === 0" :size="16" />
+                <Volume2 v-else :size="16" />
               </button>
               <input
                 type="range"
@@ -1105,110 +1146,147 @@ onBeforeUnmount(() => {
                 max="1"
                 step="0.05"
                 :value="isMuted ? 0 : volume"
-                class="h-1.5 w-16 cursor-pointer appearance-none rounded-lg bg-zinc-700 accent-indigo-500 transition opacity-80 group-hover:opacity-100 group-hover:w-20"
+                class="hidden sm:block h-1.5 w-16 cursor-pointer appearance-none rounded-lg bg-zinc-700 accent-indigo-500 transition opacity-80 group-hover:opacity-100 group-hover:w-20"
                 @input="onVolumeInput"
               />
             </div>
           </div>
 
-          <!-- Channel Info / Drawer Toggle -->
-          <div class="flex items-center gap-3">
-            <span class="hidden sm:inline-block text-xs font-semibold text-zinc-300">
-              {{ channel.cleanName }}
-            </span>
+          <!-- Right Controls: Drawer Toggle, Quality, Aspect, Fullscreen -->
+          <div class="flex items-center gap-1.5">
+            <!-- Channel Zapping Drawer Toggle Button -->
             <button
               v-if="channels.length > 1"
               type="button"
-              class="flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-3 py-1.5 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 hover:bg-zinc-700 active:scale-95 transition"
+              class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition active:scale-95 cursor-pointer"
+              :class="showChannelDrawer ? 'bg-indigo-600 text-white ring-indigo-500 font-bold shadow-md shadow-indigo-600/30' : 'bg-zinc-800/80 text-zinc-300 ring-white/10 hover:bg-zinc-700 hover:text-white'"
               @click="showChannelDrawer = !showChannelDrawer"
             >
               <Tv :size="13" />
               <span>Channels ({{ channels.length }})</span>
             </button>
+
+            <!-- Aspect Ratio Selector (visible on sm+) -->
+            <div class="relative hidden sm:block">
+              <button
+                type="button"
+                class="flex h-8 items-center gap-1 rounded-full bg-zinc-900/80 px-2.5 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800 active:scale-95 transition cursor-pointer"
+                title="Aspect Ratio"
+                @click.stop="showAspectMenu = !showAspectMenu; showQualityMenu = false"
+              >
+                <Scan :size="13" />
+                <span class="text-[11px] uppercase">{{ activeAspectRatio }}</span>
+              </button>
+            </div>
+
+            <!-- Multi-Bitrate Quality Selector -->
+            <div v-if="qualityLevels.length > 1" class="relative">
+              <button
+                type="button"
+                class="flex h-8 items-center gap-1 rounded-full bg-zinc-900/80 px-2.5 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800 active:scale-95 transition cursor-pointer"
+                title="Stream Quality"
+                @click.stop="showQualityMenu = !showQualityMenu; showAspectMenu = false"
+              >
+                <SlidersHorizontal :size="12" />
+                <span class="text-[11px]">{{ currentQualityLabel }}</span>
+              </button>
+            </div>
+
+            <!-- Fullscreen -->
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition cursor-pointer"
+              :title="isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'"
+              @click="toggleFullscreen"
+            >
+              <Minimize v-if="isFullscreen" :size="15" />
+              <Maximize v-else :size="15" />
+            </button>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Bottom Channel Zapping Bar -->
-    <div
-      v-if="showChannelDrawer && channels.length > 1"
-      class="relative z-40 border-t border-white/10 bg-zinc-950/95 px-4 py-2.5 backdrop-blur-xl"
-    >
-      <div class="mb-1.5 flex items-center justify-between">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-          Zapping Guide ({{ channels.length }})
-        </span>
-        <div class="flex items-center gap-1.5">
-          <button
-            type="button"
-            :disabled="!zappingScroll.canScrollLeft.value"
-            class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
-            aria-label="Scroll channels left"
-            @click="zappingScroll.scrollLeft()"
-          >
-            <ChevronLeft :size="12" />
-          </button>
-          <button
-            type="button"
-            :disabled="!zappingScroll.canScrollRight.value"
-            class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
-            aria-label="Scroll channels right"
-            @click="zappingScroll.scrollRight()"
-          >
-            <ChevronRight :size="12" />
-          </button>
-          <span class="text-[11px] text-zinc-500 ml-1">Tap channel to watch</span>
-        </div>
-      </div>
-
+      <!-- 2. Bottom Channel Zapping Bar: Grounded on bottom edge with zero extra space -->
       <div
-        ref="zappingGuideContainerRef"
-        class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth select-none cursor-grab active:cursor-grabbing"
+        v-if="showChannelDrawer && channels.length > 1"
+        class="pointer-events-auto border-t border-white/10 bg-zinc-950/98 px-4 pt-2 backdrop-blur-xl transition-all duration-300"
+        style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);"
       >
-        <button
-          v-for="ch in channels"
-          :key="ch.id"
-          :data-channel-id="ch.id"
-          type="button"
-          class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer"
-          :class="
-            ch.id === channel.id
-              ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/40 ring-1 ring-white/20'
-              : 'bg-zinc-900/90 text-zinc-300 ring-1 ring-white/5 hover:bg-zinc-800 hover:text-white'
-          "
-          @click="handleSelectChannel(ch)"
-        >
-          <img
-            v-if="ch.logo"
-            :src="ch.logo"
-            :alt="ch.cleanName"
-            class="h-4 w-4 object-contain rounded"
-            @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
-          />
-          <span class="truncate max-w-[120px]">{{ ch.cleanName }}</span>
-          <span
-            v-if="getChannelStatus(ch.id) === 'offline'"
-            class="flex items-center gap-1 rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-amber-400/90 ring-1 ring-amber-500/20"
-          >
-            <SignalZero :size="9" />
-            <span>Off</span>
+        <div class="mb-1.5 flex items-center justify-between">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+            Zapping Guide ({{ channels.length }})
           </span>
-          <span
-            v-else
-            class="flex items-center gap-1"
-          >
-            <SignalHigh v-if="getChannelNetworkStrength(ch.id) === 'excellent'" :size="10" class="text-emerald-400" />
-            <SignalMedium v-else-if="getChannelNetworkStrength(ch.id) === 'good'" :size="10" class="text-teal-400" />
-            <SignalLow v-else-if="getChannelNetworkStrength(ch.id) === 'fair' || getChannelNetworkStrength(ch.id) === 'poor'" :size="10" class="text-amber-400" />
-            <span
-              v-if="ch.resolution"
-              class="rounded bg-black/40 px-1 py-0.2 text-[8px] font-bold text-zinc-300"
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              :disabled="!zappingScroll.canScrollLeft.value"
+              class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+              aria-label="Scroll channels left"
+              @click="zappingScroll.scrollLeft()"
             >
-              {{ ch.resolution }}
+              <ChevronLeft :size="12" />
+            </button>
+            <button
+              type="button"
+              :disabled="!zappingScroll.canScrollRight.value"
+              class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+              aria-label="Scroll channels right"
+              @click="zappingScroll.scrollRight()"
+            >
+              <ChevronRight :size="12" />
+            </button>
+            <span class="text-[11px] text-zinc-500 ml-1">Tap channel to watch</span>
+          </div>
+        </div>
+
+        <div
+          ref="zappingGuideContainerRef"
+          class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth select-none cursor-grab active:cursor-grabbing"
+        >
+          <button
+            v-for="ch in channels"
+            :key="ch.id"
+            :data-channel-id="ch.id"
+            type="button"
+            class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer"
+            :class="
+              ch.id === channel.id
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/40 ring-1 ring-white/20'
+                : 'bg-zinc-900/90 text-zinc-300 ring-1 ring-white/5 hover:bg-zinc-800 hover:text-white'
+            "
+            @click="handleSelectChannel(ch)"
+          >
+            <img
+              v-if="ch.logo"
+              :src="ch.logo"
+              :alt="ch.cleanName"
+              class="h-4 w-4 object-contain rounded"
+              @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
+            />
+            <span class="truncate max-w-[120px]">{{ ch.cleanName }}</span>
+            <span
+              v-if="getChannelStatus(ch.id) === 'offline'"
+              class="flex items-center gap-1 rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-amber-400/90 ring-1 ring-amber-500/20"
+            >
+              <SignalZero :size="9" />
+              <span>Off</span>
             </span>
-          </span>
-        </button>
+            <span
+              v-else
+              class="flex items-center gap-1"
+            >
+              <SignalHigh v-if="getChannelNetworkStrength(ch.id) === 'excellent'" :size="10" class="text-emerald-400" />
+              <SignalMedium v-else-if="getChannelNetworkStrength(ch.id) === 'good'" :size="10" class="text-teal-400" />
+              <SignalLow v-else-if="getChannelNetworkStrength(ch.id) === 'fair' || getChannelNetworkStrength(ch.id) === 'poor'" :size="10" class="text-amber-400" />
+              <span
+                v-if="ch.resolution"
+                class="rounded bg-black/40 px-1 py-0.2 text-[8px] font-bold text-zinc-300"
+              >
+                {{ ch.resolution }}
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
