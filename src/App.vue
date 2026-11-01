@@ -695,11 +695,14 @@ onBeforeUnmount(() => {
               <!-- Play / Pause in mini player -->
               <button
                 type="button"
-                class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90"
+                class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90 hover:bg-zinc-100"
                 :aria-label="isPlaying ? 'Pause' : 'Play'"
                 @click.stop="player.togglePlay()"
               >
-                <Pause v-if="isPlaying" :size="16" fill="currentColor" />
+                <div v-if="isPlaying" class="flex items-center justify-center gap-1">
+                  <span class="h-3.5 w-1 rounded-full bg-zinc-950"></span>
+                  <span class="h-3.5 w-1 rounded-full bg-zinc-950"></span>
+                </div>
                 <Play v-else :size="16" fill="currentColor" class="translate-x-0.5" />
               </button>
 
@@ -863,79 +866,106 @@ onBeforeUnmount(() => {
         />
 
         <!-- Primary Transport Controls -->
-        <div class="flex items-center justify-between py-1">
+        <div class="flex items-center justify-between px-1 py-3">
           <!-- Shuffle Button -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90"
-            :class="isShuffle ? 'text-indigo-400 bg-indigo-500/10 ring-1 ring-indigo-500/30' : 'text-zinc-400 hover:text-white'"
+            class="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 active:scale-90"
+            :class="
+              isShuffle
+                ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.3)]'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05]'
+            "
             :aria-label="isShuffle ? 'Disable shuffle' : 'Enable shuffle'"
             @click="player.toggleShuffle()"
           >
-            <Shuffle :size="18" />
+            <Shuffle :size="19" stroke-width="2" />
           </button>
 
-          <!-- 10s Backward Skip -->
+          <!-- 10s Backward Skip with "10" inside -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition active:scale-90 hover:text-white"
+            class="relative flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 transition-all duration-200 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-90"
             aria-label="Rewind 10 seconds"
             @click="player.seekBy(-10)"
           >
-            <RotateCcw :size="20" />
+            <RotateCcw :size="23" stroke-width="1.75" />
+            <span class="absolute text-[9px] font-black tracking-tighter">10</span>
           </button>
 
           <!-- Previous Track -->
           <button
             type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-full text-white transition active:scale-90 hover:text-indigo-400"
+            class="flex h-12 w-12 items-center justify-center rounded-full text-zinc-300 transition-all duration-200 hover:text-white hover:bg-white/[0.06] active:scale-90"
             aria-label="Previous track"
             @click="player.previous()"
           >
-            <SkipBack :size="24" fill="currentColor" />
+            <SkipBack :size="24" class="fill-current" />
           </button>
 
-          <!-- Main Play / Pause Hero Button -->
-          <button
-            type="button"
-            class="flex h-18 w-18 items-center justify-center rounded-full bg-white text-zinc-950 shadow-2xl shadow-white/20 transition active:scale-95 hover:bg-zinc-100"
-            :aria-label="isPlaying ? 'Pause' : 'Play'"
-            @click="player.togglePlay()"
-          >
-            <Pause v-if="isPlaying" :size="30" fill="currentColor" />
-            <Play v-else :size="30" fill="currentColor" class="translate-x-0.5" />
-          </button>
+          <!-- Main Hero Play / Pause Button with Glowing Aura -->
+          <div class="relative flex items-center justify-center">
+            <!-- Pulsing ambient glow aura -->
+            <div
+              class="pointer-events-none absolute -inset-2.5 rounded-full bg-gradient-to-r from-indigo-500/35 via-indigo-400/25 to-violet-500/35 blur-xl transition-all duration-500"
+              :class="isPlaying ? 'opacity-100 scale-110' : 'opacity-0 scale-90'"
+            ></div>
+
+            <button
+              type="button"
+              class="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.25)] ring-4 ring-white/15 transition-all duration-200 active:scale-95 hover:scale-105 hover:bg-zinc-100 focus:outline-none"
+              :aria-label="isPlaying ? 'Pause' : 'Play'"
+              @click="player.togglePlay()"
+            >
+              <!-- Dual-pill sleek pause bars with breathing room -->
+              <div v-if="isPlaying" class="flex items-center justify-center gap-2">
+                <span class="h-6 w-2 rounded-full bg-zinc-950 shadow-sm"></span>
+                <span class="h-6 w-2 rounded-full bg-zinc-950 shadow-sm"></span>
+              </div>
+              <!-- Play triangle centered with optical offset -->
+              <Play
+                v-else
+                :size="30"
+                class="fill-zinc-950 text-zinc-950 translate-x-0.5"
+              />
+            </button>
+          </div>
 
           <!-- Next Track -->
           <button
             type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-full text-white transition active:scale-90 hover:text-indigo-400"
+            class="flex h-12 w-12 items-center justify-center rounded-full text-zinc-300 transition-all duration-200 hover:text-white hover:bg-white/[0.06] active:scale-90"
             aria-label="Next track"
             @click="player.next()"
           >
-            <SkipForward :size="24" fill="currentColor" />
+            <SkipForward :size="24" class="fill-current" />
           </button>
 
-          <!-- 10s Forward Skip -->
+          <!-- 10s Forward Skip with "10" inside -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition active:scale-90 hover:text-white"
+            class="relative flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 transition-all duration-200 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-90"
             aria-label="Forward 10 seconds"
             @click="player.seekBy(10)"
           >
-            <RotateCw :size="20" />
+            <RotateCw :size="23" stroke-width="1.75" />
+            <span class="absolute text-[9px] font-black tracking-tighter">10</span>
           </button>
 
           <!-- Repeat Mode Button -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full transition active:scale-90"
-            :class="repeatMode !== 'off' ? 'text-indigo-400 bg-indigo-500/10 ring-1 ring-indigo-500/30' : 'text-zinc-400 hover:text-white'"
+            class="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 active:scale-90"
+            :class="
+              repeatMode !== 'off'
+                ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.3)]'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05]'
+            "
             :aria-label="`Repeat mode: ${repeatMode}`"
             @click="player.cycleRepeat()"
           >
-            <Repeat1 v-if="repeatMode === 'one'" :size="18" />
-            <Repeat v-else :size="18" />
+            <Repeat1 v-if="repeatMode === 'one'" :size="18" stroke-width="2.2" />
+            <Repeat v-else :size="18" stroke-width="2" />
           </button>
         </div>
       </section>
