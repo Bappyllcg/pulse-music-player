@@ -2,52 +2,35 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AudioLines,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Globe,
   Heart,
   Import,
-  Info,
-  ListMusic,
-  Maximize2,
   Menu,
-  MinusCircle,
-  Moon,
-  Music,
-  Pause,
-  Play,
-  Plus,
   Radio,
   RefreshCw,
-  Repeat,
-  Repeat1,
-  RotateCcw,
-  RotateCw,
   Search,
-  ShieldCheck,
-  Shuffle,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
-  SignalZero,
-  SkipBack,
-  SkipForward,
-  Sparkles,
   Tv,
   X,
 } from 'lucide-vue-next'
-import MarqueeText from './components/MarqueeText.vue'
-import WaveformScrubber from './components/WaveformScrubber.vue'
 
+import LiveRadioSection from './components/LiveRadioSection.vue'
 import LiveTvModal from './components/LiveTvModal.vue'
+import LiveTvSection from './components/LiveTvSection.vue'
+import MiniPlayerBar from './components/MiniPlayerBar.vue'
+import NowPlayingView from './components/NowPlayingView.vue'
+import RemoveConfirmModal from './components/RemoveConfirmModal.vue'
+import SideMenuDrawer from './components/SideMenuDrawer.vue'
+import SleepTimerDrawer from './components/SleepTimerDrawer.vue'
+import TrackList from './components/TrackList.vue'
+import UpNextDrawer from './components/UpNextDrawer.vue'
+
 import { useAudioStorage } from './composables/useAudioStorage'
 import { useLiveTv, type TvCategoryId, type TvRegionId } from './composables/useLiveTv'
 import { useOnlineMusic } from './composables/useOnlineMusic'
 import { usePlayer } from './composables/usePlayer'
 import { useRadio, type RadioCategoryId, type RadioRegionId } from './composables/useRadio'
-import { SLEEP_MINUTE_OPTIONS, useSleepTimer } from './composables/useSleepTimer'
+import { useSleepTimer } from './composables/useSleepTimer'
+import type { PlayableTrack } from './types/music'
 
 /* ------------------------------------------------------------------ */
 /* Composables & State                                                */
@@ -131,7 +114,6 @@ const selectedFilter = ref<'all' | 'liked' | 'recent' | 'online' | 'radio' | 'tv
 /** Search */
 const showSearch = ref(false)
 const searchQuery = ref('')
-
 let searchDebounceTimer: number | undefined
 
 watch(searchQuery, (newQuery) => {
@@ -287,54 +269,6 @@ const notice = ref<string | null>(null)
 let noticeTimer: number | undefined
 
 /* ------------------------------------------------------------------ */
-/* App Update Checker (PWA & Service Worker)                          */
-/* ------------------------------------------------------------------ */
-
-const isCheckingUpdate = ref(false)
-const updateStatus = ref<'latest' | 'update_available' | 'error' | null>(null)
-const lastUpdateChecked = ref<string | null>(null)
-
-async function checkForUpdate(): Promise<void> {
-  if (isCheckingUpdate.value) return
-  isCheckingUpdate.value = true
-  updateStatus.value = null
-
-  try {
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.getRegistration()
-      if (registration) {
-        await Promise.all([
-          registration.update(),
-          new Promise((resolve) => setTimeout(resolve, 800)),
-        ])
-        if (registration.waiting || registration.installing) {
-          updateStatus.value = 'update_available'
-        } else {
-          updateStatus.value = 'latest'
-        }
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 800))
-        updateStatus.value = 'latest'
-      }
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 600))
-      updateStatus.value = 'latest'
-    }
-    const now = new Date()
-    lastUpdateChecked.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  } catch (err) {
-    console.error('[Pulse] Update check failed:', err)
-    updateStatus.value = 'error'
-  } finally {
-    isCheckingUpdate.value = false
-  }
-}
-
-function applyUpdate(): void {
-  window.location.reload()
-}
-
-/* ------------------------------------------------------------------ */
 /* Filtered Tracks & Active Queue Synchronization                     */
 /* ------------------------------------------------------------------ */
 
@@ -448,7 +382,7 @@ function cancelRemoveTrack(): void {
 }
 
 /** Tapping a track row in library opens Now Playing without pausing already-playing tracks */
-function playTrackAndShow(track: typeof tracks.value[0]): void {
+function playTrackAndShow(track: PlayableTrack): void {
   if (player.currentTrack.value?.id === track.id) {
     if (!player.isPlaying.value) {
       player.play()
@@ -461,7 +395,7 @@ function playTrackAndShow(track: typeof tracks.value[0]): void {
 }
 
 /** Circular play/pause button explicitly toggles play/pause */
-function toggleTrackPlayback(track: typeof tracks.value[0]): void {
+function toggleTrackPlayback(track: PlayableTrack): void {
   if (player.currentTrack.value?.id !== track.id) {
     player.setQueue(filteredTracks.value)
   }
@@ -469,7 +403,7 @@ function toggleTrackPlayback(track: typeof tracks.value[0]): void {
 }
 
 /** Up Next drawer track row click */
-function selectQueueTrack(track: typeof tracks.value[0]): void {
+function selectQueueTrack(track: PlayableTrack): void {
   if (player.currentTrack.value?.id === track.id) {
     if (!player.isPlaying.value) player.play()
   } else {
@@ -543,77 +477,6 @@ watch(
   },
 )
 
-/* ------------------------------------------------------------------ */
-/* Swipe-to-Dismiss Gestures for Drawers & Bottom Sheets              */
-/* ------------------------------------------------------------------ */
-
-const menuDragOffset = ref(0)
-const isDraggingMenu = ref(false)
-let touchStartXMenu = 0
-
-function onMenuTouchStart(e: TouchEvent): void {
-  touchStartXMenu = e.touches[0].clientX
-  isDraggingMenu.value = true
-}
-function onMenuTouchMove(e: TouchEvent): void {
-  if (!isDraggingMenu.value) return
-  const deltaX = e.touches[0].clientX - touchStartXMenu
-  // Only allow dragging to the right (closing direction)
-  menuDragOffset.value = deltaX > 0 ? deltaX : 0
-}
-function onMenuTouchEnd(): void {
-  if (!isDraggingMenu.value) return
-  isDraggingMenu.value = false
-  if (menuDragOffset.value > 70) {
-    menuOpen.value = false
-  }
-  menuDragOffset.value = 0
-}
-
-const playlistDragOffset = ref(0)
-const isDraggingPlaylist = ref(false)
-let touchStartYPlaylist = 0
-
-function onPlaylistTouchStart(e: TouchEvent): void {
-  touchStartYPlaylist = e.touches[0].clientY
-  isDraggingPlaylist.value = true
-}
-function onPlaylistTouchMove(e: TouchEvent): void {
-  if (!isDraggingPlaylist.value) return
-  const deltaY = e.touches[0].clientY - touchStartYPlaylist
-  playlistDragOffset.value = deltaY > 0 ? deltaY : 0
-}
-function onPlaylistTouchEnd(): void {
-  if (!isDraggingPlaylist.value) return
-  isDraggingPlaylist.value = false
-  if (playlistDragOffset.value > 80) {
-    playlistOpen.value = false
-  }
-  playlistDragOffset.value = 0
-}
-
-const sleepDragOffset = ref(0)
-const isDraggingSleep = ref(false)
-let touchStartYSleep = 0
-
-function onSleepTouchStart(e: TouchEvent): void {
-  touchStartYSleep = e.touches[0].clientY
-  isDraggingSleep.value = true
-}
-function onSleepTouchMove(e: TouchEvent): void {
-  if (!isDraggingSleep.value) return
-  const deltaY = e.touches[0].clientY - touchStartYSleep
-  sleepDragOffset.value = deltaY > 0 ? deltaY : 0
-}
-function onSleepTouchEnd(): void {
-  if (!isDraggingSleep.value) return
-  isDraggingSleep.value = false
-  if (sleepDragOffset.value > 80) {
-    sleepOpen.value = false
-  }
-  sleepDragOffset.value = 0
-}
-
 onMounted(async () => {
   loadLiked()
   window.addEventListener('keydown', onKeydown)
@@ -671,7 +534,7 @@ onBeforeUnmount(() => {
       v-show="activeTab === 'library'"
       class="flex h-full flex-col overflow-hidden"
     >
-      <!-- Scrollable content area (padded at bottom to clear mini player) -->
+      <!-- Scrollable content area -->
       <div
         class="flex-1 overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]"
         :class="selectedFilter === 'tv' ? 'pb-10' : 'pb-32'"
@@ -743,7 +606,7 @@ onBeforeUnmount(() => {
               <input
                 v-model="searchQuery"
                 type="search"
-                placeholder="Search tracks or artists..."
+                placeholder="Search tracks, radio, TV..."
                 class="w-full rounded-2xl bg-zinc-900/90 py-2.5 pr-10 pl-10 text-xs font-medium text-white placeholder-zinc-500 ring-1 ring-white/10 backdrop-blur-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
               <button
@@ -859,1484 +722,185 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- Live Radio Country / Region Priority Bar (BD 1st, IN 2nd, PK 3rd, Global 4th) -->
-        <div
-          v-if="selectedFilter === 'radio'"
-          class="mb-2.5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
-        >
-          <button
-            v-for="reg in radioRegions"
-            :key="reg.id"
-            type="button"
-            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95"
-            :class="
-              activeRadioRegion === reg.id
-                ? 'bg-gradient-to-r from-rose-500 to-indigo-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
-                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
-            "
-            @click="onSelectRadioRegion(reg.id)"
-          >
-            <span>{{ reg.flag }}</span>
-            <span>{{ reg.label }}</span>
-          </button>
-        </div>
+        <!-- ============================================================== -->
+        <!-- CONTENT VIEWS BY FILTER                                        -->
+        <!-- ============================================================== -->
 
-        <!-- Live Radio Category Filtration Sub-Bar -->
-        <div
-          v-if="selectedFilter === 'radio'"
-          class="mb-5 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
-        >
-          <button
-            v-for="cat in radioCategories"
-            :key="cat.id"
-            type="button"
-            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1 text-[11px] font-semibold transition active:scale-95"
-            :class="
-              activeRadioCategory === cat.id
-                ? 'bg-zinc-100 text-zinc-950 font-bold shadow-md ring-1 ring-white'
-                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/5 hover:text-white hover:bg-zinc-800'
-            "
-            @click="onSelectRadioCategory(cat.id)"
-          >
-            <span>{{ cat.label }}</span>
-          </button>
-        </div>
-
-        <!-- Live TV Country / Region Priority Bar (BD 1st, IN 2nd, PK 3rd, Global 4th) -->
-        <div
+        <!-- 1. Live TV View -->
+        <LiveTvSection
           v-if="selectedFilter === 'tv'"
-          class="mb-2.5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
-        >
-          <button
-            v-for="reg in tvRegions"
-            :key="reg.id"
-            type="button"
-            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95"
-            :class="
-              activeTvRegion === reg.id
-                ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
-                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
-            "
-            @click="onSelectTvRegion(reg.id)"
-          >
-            <span>{{ reg.flag }}</span>
-            <span>{{ reg.label }}</span>
-          </button>
-        </div>
-
-        <!-- Live TV Massive Category Filtration Sub-Bar -->
-        <div
-          v-if="selectedFilter === 'tv'"
-          class="mb-5 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
-        >
-          <button
-            v-for="cat in tvCategories"
-            :key="cat.id"
-            type="button"
-            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1 text-[11px] font-semibold transition active:scale-95"
-            :class="
-              activeTvCategory === cat.id
-                ? 'bg-zinc-100 text-zinc-950 font-bold shadow-md ring-1 ring-white'
-                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/5 hover:text-white hover:bg-zinc-800'
-            "
-            @click="onSelectTvCategory(cat.id)"
-          >
-            <span>{{ cat.label }}</span>
-          </button>
-        </div>
-
-        <!-- Track List / TV Channel Grid -->
-        <section aria-label="Media list">
-          <div class="mb-3 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <h2 class="text-lg font-bold text-white">
-                {{
-                  selectedFilter === 'tv'
-                    ? activeTvLabel
-                    : selectedFilter === 'online'
-                      ? activeGenreLabel
-                      : selectedFilter === 'radio'
-                        ? activeRadioLabel
-                        : selectedFilter === 'liked'
-                          ? 'Liked'
-                          : selectedFilter === 'recent'
-                            ? 'Recent Tracks'
-                            : 'Your library'
-                }}
-              </h2>
-              <button
-                v-if="selectedFilter === 'online' || selectedFilter === 'radio' || selectedFilter === 'tv'"
-                type="button"
-                class="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition hover:text-white hover:bg-zinc-800"
-                :title="selectedFilter === 'tv' ? 'Refresh TV channels' : selectedFilter === 'radio' ? 'Refresh radio stations' : 'Refresh online tracks'"
-                @click="selectedFilter === 'tv' ? selectTvRegion(activeTvRegion, true) : selectedFilter === 'radio' ? fetchRadioStations(true) : fetchOnlineTracks(true)"
-              >
-                <RefreshCw
-                  :size="13"
-                  :class="{ 'animate-spin': selectedFilter === 'tv' ? isLoadingTv : selectedFilter === 'radio' ? isLoadingRadio : isLoadingOnline }"
-                />
-              </button>
-            </div>
-            <div class="flex items-center gap-2">
-              <span
-                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio) || (selectedFilter === 'tv' && isLoadingTv)) && (selectedFilter === 'tv' ? filteredTvChannels.length > 0 : filteredTracks.length > 0)"
-                class="flex items-center gap-1 text-[11px] font-medium"
-                :class="selectedFilter === 'tv' ? 'text-amber-400' : selectedFilter === 'radio' ? 'text-rose-400' : 'text-indigo-400'"
-              >
-                <span
-                  class="h-1.5 w-1.5 rounded-full animate-ping"
-                  :class="selectedFilter === 'tv' ? 'bg-amber-400' : selectedFilter === 'radio' ? 'bg-rose-400' : 'bg-indigo-400'"
-                ></span>
-                <span>{{ selectedFilter === 'tv' ? 'Updating...' : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
-              </span>
-              <span v-if="selectedFilter !== 'tv' && selectedFilter !== 'radio'" class="text-xs font-medium text-zinc-500">
-                {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Loading state for Live TV -->
-          <div
-            v-if="selectedFilter === 'tv' && isLoadingTv && filteredTvChannels.length === 0"
-            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
-          >
-            <div class="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent"></div>
-            <p class="text-sm font-medium text-zinc-300">Fetching live TV playlist...</p>
-            <p class="text-xs text-zinc-500">Connecting to iptv-org directory</p>
-          </div>
-
-          <!-- Error state for Live TV -->
-          <div
-            v-else-if="selectedFilter === 'tv' && tvError && filteredTvChannels.length === 0"
-            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
-          >
-            <Tv :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">{{ tvError }}</p>
-            <button
-              type="button"
-              class="mt-1 rounded-full bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-amber-500"
-              @click="selectTvRegion(activeTvRegion, true)"
-            >
-              Retry
-            </button>
-          </div>
-
-          <!-- Empty state for Live TV -->
-          <div
-            v-else-if="selectedFilter === 'tv' && filteredTvChannels.length === 0"
-            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
-          >
-            <Tv :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">No TV channels found</p>
-            <p class="text-xs text-zinc-500">Try changing category or clearing your search.</p>
-          </div>
-
-          <!-- Live TV Channel Grid -->
-          <div v-else-if="selectedFilter === 'tv'" class="space-y-2">
-            <div
-              v-for="ch in filteredTvChannels"
-              :key="ch.id"
-              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 transition active:scale-[0.99] cursor-pointer hover:bg-zinc-800/60"
-              :class="
-                getTvChannelStatus(ch.id) === 'offline'
-                  ? 'ring-white/[0.03] opacity-75 hover:opacity-100 hover:ring-white/[0.08]'
-                  : 'ring-white/[0.06] active:bg-zinc-800/80'
-              "
-              @click="onPlayTvChannel(ch)"
-            >
-              <div class="flex min-w-0 flex-1 items-center gap-3 pr-2">
-                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-950 p-1 ring-1 ring-white/10 flex items-center justify-center">
-                  <img
-                    v-if="ch.logo"
-                    :src="ch.logo"
-                    :alt="ch.cleanName"
-                    class="h-full w-full object-contain"
-                    loading="lazy"
-                    @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
-                  />
-                  <Tv v-else :size="20" class="text-zinc-500" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5">
-                    <p
-                      class="truncate text-sm font-semibold transition-colors"
-                      :class="
-                        getTvChannelStatus(ch.id) === 'offline'
-                          ? 'text-zinc-400 group-hover:text-zinc-200'
-                          : 'text-zinc-100 group-hover:text-amber-300'
-                      "
-                    >
-                      {{ ch.cleanName }}
-                    </p>
-                    <span
-                      v-if="ch.resolution"
-                      class="shrink-0 rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-bold text-cyan-400 ring-1 ring-cyan-500/30"
-                    >
-                      {{ ch.resolution }}
-                    </span>
-                  </div>
-                  <p class="truncate text-xs text-zinc-400">{{ ch.group || 'Live Stream' }}</p>
-                </div>
-              </div>
-
-              <div class="flex shrink-0 items-center gap-2">
-                <!-- Network Strength Badge -->
-                <div
-                  v-if="getTvChannelStatus(ch.id) !== 'offline'"
-                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 transition"
-                  :class="
-                    getTvNetworkStrength(ch.id) === 'excellent'
-                      ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/25'
-                      : getTvNetworkStrength(ch.id) === 'good'
-                        ? 'bg-teal-500/10 text-teal-400 ring-teal-500/25'
-                        : getTvNetworkStrength(ch.id) === 'fair'
-                          ? 'bg-amber-500/10 text-amber-400 ring-amber-500/25'
-                          : 'bg-zinc-800/80 text-zinc-400 ring-white/10'
-                  "
-                  :title="
-                    getTvChannelLatency(ch.id)
-                      ? `Network Ping: ${getTvChannelLatency(ch.id)}ms (${getTvNetworkStrength(ch.id)})`
-                      : 'Stream Signal: Good'
-                  "
-                >
-                  <SignalHigh
-                    v-if="getTvNetworkStrength(ch.id) === 'excellent'"
-                    :size="12"
-                    class="text-emerald-400"
-                  />
-                  <SignalMedium
-                    v-else-if="getTvNetworkStrength(ch.id) === 'good'"
-                    :size="12"
-                    class="text-teal-400"
-                  />
-                  <SignalLow
-                    v-else-if="getTvNetworkStrength(ch.id) === 'fair' || getTvNetworkStrength(ch.id) === 'poor'"
-                    :size="12"
-                    class="text-amber-400"
-                  />
-                  <SignalZero
-                    v-else
-                    :size="12"
-                    class="text-zinc-500"
-                  />
-                  <span
-                    v-if="getTvChannelLatency(ch.id)"
-                    class="font-mono text-[9px] font-semibold text-zinc-300"
-                  >
-                    {{ getTvChannelLatency(ch.id) }}ms
-                  </span>
-                  <span
-                    v-else-if="getTvChannelStatus(ch.id) === 'online'"
-                    class="font-mono text-[9px] font-semibold text-emerald-400/90"
-                  >
-                    Good
-                  </span>
-                  <span
-                    v-else
-                    class="flex items-center gap-1 text-[9px] text-zinc-400 font-medium"
-                  >
-                    <span class="h-1 w-1 rounded-full bg-indigo-400 animate-ping"></span>
-                    <span>Checking...</span>
-                  </span>
-                </div>
-
-                <div
-                  class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white"
-                >
-                  <div
-                    v-if="activePlayingChannel?.id === ch.id"
-                    class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                  ></div>
-                  <Play v-else :size="14" fill="currentColor" class="translate-x-0.5" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Loading state for Live Radio -->
-          <div
-            v-if="selectedFilter === 'radio' && isLoadingRadio && filteredRadioStations.length === 0"
-            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
-          >
-            <div class="h-8 w-8 animate-spin rounded-full border-2 border-rose-500 border-t-transparent"></div>
-            <p class="text-sm font-medium text-zinc-300">Tuning into live radio playlist...</p>
-            <p class="text-xs text-zinc-500">Connecting to Radio Browser directory</p>
-          </div>
-
-          <!-- Error state for Live Radio -->
-          <div
-            v-else-if="selectedFilter === 'radio' && radioError && filteredRadioStations.length === 0"
-            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
-          >
-            <Radio :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">{{ radioError }}</p>
-            <button
-              type="button"
-              class="mt-1 rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-rose-500"
-              @click="selectRadioRegion(activeRadioRegion, true)"
-            >
-              Retry
-            </button>
-          </div>
-
-          <!-- Empty state for Live Radio -->
-          <div
-            v-else-if="selectedFilter === 'radio' && filteredRadioStations.length === 0"
-            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
-          >
-            <Radio :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">No radio stations found</p>
-            <p class="text-xs text-zinc-500">Try changing category or clearing your search.</p>
-          </div>
-
-          <!-- Live Radio Station Grid -->
-          <div v-else-if="selectedFilter === 'radio'" class="space-y-2">
-            <div
-              v-for="station in filteredRadioStations"
-              :key="station.id"
-              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 transition active:scale-[0.99] cursor-pointer hover:bg-zinc-800/60"
-              :class="
-                currentTrack?.id === station.id
-                  ? 'bg-rose-950/30 ring-rose-500/40'
-                  : getRadioStationStatus(station.id) === 'offline'
-                    ? 'ring-white/[0.03] opacity-75 hover:opacity-100 hover:ring-white/[0.08]'
-                    : 'ring-white/[0.06] active:bg-zinc-800/80'
-              "
-              @click="playTrackAndShow(station)"
-            >
-              <div class="flex min-w-0 flex-1 items-center gap-3 pr-2">
-                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-950 p-1 ring-1 ring-white/10 flex items-center justify-center">
-                  <img
-                    v-if="station.coverUrl"
-                    :src="station.coverUrl"
-                    :alt="station.title"
-                    class="h-full w-full object-contain"
-                    loading="lazy"
-                    @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
-                  />
-                  <Radio v-else :size="20" class="text-rose-400" />
-
-                  <!-- Playing equalizer animation -->
-                  <div
-                    v-if="currentTrack?.id === station.id"
-                    class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl"
-                  >
-                    <span
-                      v-for="n in 3"
-                      :key="n"
-                      class="animate-eq mx-[1px] h-3.5 w-1 origin-bottom rounded-full bg-rose-400"
-                      :style="{ animationDelay: `${n * 0.15}s`, animationPlayState: isPlaying ? 'running' : 'paused' }"
-                    ></span>
-                  </div>
-                </div>
-
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5">
-                    <p
-                      class="truncate text-sm font-semibold transition-colors"
-                      :class="
-                        currentTrack?.id === station.id
-                          ? 'text-rose-300 font-bold'
-                          : getRadioStationStatus(station.id) === 'offline'
-                            ? 'text-zinc-400 group-hover:text-zinc-200'
-                            : 'text-zinc-100 group-hover:text-rose-300'
-                      "
-                    >
-                      {{ station.title }}
-                    </p>
-                    <span
-                      v-if="station.bitrate"
-                      class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
-                    >
-                      {{ station.bitrate }}K
-                    </span>
-                    <span
-                      v-else-if="station.codec"
-                      class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
-                    >
-                      {{ station.codec }}
-                    </span>
-                  </div>
-                  <p class="truncate text-xs text-zinc-400">{{ station.artist || 'Live Radio' }}</p>
-                </div>
-              </div>
-
-              <div class="flex shrink-0 items-center gap-2">
-                <!-- Network Strength Badge -->
-                <div
-                  v-if="getRadioStationStatus(station.id) !== 'offline'"
-                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 transition"
-                  :class="
-                    getRadioNetworkStrength(station.id) === 'excellent'
-                      ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/25'
-                      : getRadioNetworkStrength(station.id) === 'good'
-                        ? 'bg-teal-500/10 text-teal-400 ring-teal-500/25'
-                        : getRadioNetworkStrength(station.id) === 'fair'
-                          ? 'bg-amber-500/10 text-amber-400 ring-amber-500/25'
-                          : 'bg-zinc-800/80 text-zinc-400 ring-white/10'
-                  "
-                  :title="
-                    getRadioStationLatency(station.id)
-                      ? `Network Ping: ${getRadioStationLatency(station.id)}ms (${getRadioNetworkStrength(station.id)})`
-                      : 'Stream Signal: Good'
-                  "
-                >
-                  <SignalHigh
-                    v-if="getRadioNetworkStrength(station.id) === 'excellent'"
-                    :size="12"
-                    class="text-emerald-400"
-                  />
-                  <SignalMedium
-                    v-else-if="getRadioNetworkStrength(station.id) === 'good'"
-                    :size="12"
-                    class="text-teal-400"
-                  />
-                  <SignalLow
-                    v-else-if="getRadioNetworkStrength(station.id) === 'fair' || getRadioNetworkStrength(station.id) === 'poor'"
-                    :size="12"
-                    class="text-amber-400"
-                  />
-                  <SignalZero
-                    v-else
-                    :size="12"
-                    class="text-zinc-500"
-                  />
-                  <span
-                    v-if="getRadioStationLatency(station.id)"
-                    class="font-mono text-[9px] font-semibold text-zinc-300"
-                  >
-                    {{ getRadioStationLatency(station.id) }}ms
-                  </span>
-                  <span
-                    v-else-if="getRadioStationStatus(station.id) === 'online'"
-                    class="font-mono text-[9px] font-semibold text-emerald-400/90"
-                  >
-                    Good
-                  </span>
-                  <span
-                    v-else
-                    class="flex items-center gap-1 text-[9px] text-zinc-400 font-medium"
-                  >
-                    <span class="h-1 w-1 rounded-full bg-rose-400 animate-ping"></span>
-                    <span>Checking...</span>
-                  </span>
-                </div>
-
-                <!-- Favorite Heart Button -->
-                <button
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition active:scale-90"
-                  :class="{ 'text-rose-500': likedIds.has(station.id) }"
-                  :aria-label="likedIds.has(station.id) ? 'Unlike' : 'Like'"
-                  @click.stop="toggleLike(station.id)"
-                >
-                  <Heart :size="15" :fill="likedIds.has(station.id) ? 'currentColor' : 'none'" />
-                </button>
-
-                <!-- Circular Play Button -->
-                <button
-                  type="button"
-                  class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white active:scale-90"
-                  :aria-label="currentTrack?.id === station.id && isPlaying ? 'Pause' : 'Play'"
-                  @click.stop="toggleTrackPlayback(station)"
-                >
-                  <Pause v-if="currentTrack?.id === station.id && isPlaying" :size="14" fill="currentColor" />
-                  <Play v-else :size="14" fill="currentColor" class="translate-x-0.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Loading state for online music -->
-          <div
-            v-else-if="isLoadingOnline && selectedFilter === 'online' && filteredTracks.length === 0"
-            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
-          >
-            <div class="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
-            <p class="text-sm font-medium text-zinc-300">Searching Jamendo catalog...</p>
-            <p class="text-xs text-zinc-500">
-              {{ searchQuery.trim() ? `Searching for “${searchQuery.trim()}”` : 'Fetching curated music from Jamendo' }}
-            </p>
-          </div>
-
-          <!-- Error state for online music -->
-          <div
-            v-else-if="selectedFilter === 'online' && onlineError && filteredTracks.length === 0"
-            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
-          >
-            <Globe :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">{{ onlineError }}</p>
-            <button
-              type="button"
-              class="mt-1 rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-indigo-500"
-              @click="fetchOnlineTracks(true)"
-            >
-              Retry
-            </button>
-          </div>
-
-          <!-- Generic empty state -->
-          <div
-            v-else-if="filteredTracks.length === 0"
-            class="flex flex-col items-center justify-center gap-3.5 rounded-3xl bg-zinc-900/40 py-14 px-6 text-center ring-1 ring-zinc-800/80"
-          >
-            <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-800/70 text-zinc-500 ring-1 ring-white/10 shadow-inner">
-              <Music :size="28" />
-            </div>
-
-            <div class="max-w-xs space-y-1">
-              <p class="text-base font-bold text-zinc-200">No tracks found</p>
-              <p class="text-xs text-zinc-400 leading-relaxed">
-                {{
-                  searchQuery
-                    ? (selectedFilter === 'online'
-                        ? `No online tracks matching “${searchQuery}”.`
-                        : `No tracks matching “${searchQuery}”. Try searching online music or importing files.`)
-                    : selectedFilter === 'liked'
-                      ? 'No liked tracks yet. Tap the heart on any song to add it!'
-                      : selectedFilter === 'recent'
-                        ? 'No recently played tracks yet.'
-                        : selectedFilter === 'online'
-                          ? 'No online music found. Try another genre.'
-                          : 'Import audio files from your device or stream free online music.'
-                }}
-              </p>
-            </div>
-
-            <!-- Action buttons: Import & Online Music -->
-            <div class="mt-2 flex flex-wrap items-center justify-center gap-2.5">
-              <!-- Import Button -->
-              <button
-                type="button"
-                class="flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500 disabled:opacity-50"
-                :disabled="isImporting"
-                @click="openFilePicker"
-              >
-                <Plus :size="15" />
-                <span>{{ isImporting ? 'Adding...' : 'Import Audio' }}</span>
-              </button>
-
-              <!-- Online Music Button -->
-              <button
-                type="button"
-                class="flex items-center gap-2 rounded-full bg-zinc-800/90 px-4 py-2.5 text-xs font-semibold text-zinc-200 shadow-md ring-1 ring-white/10 transition active:scale-95 hover:bg-zinc-700 hover:text-white"
-                @click="selectOnlineFilter"
-              >
-                <Globe :size="15" class="text-indigo-400" />
-                <span>Online Music</span>
-              </button>
-
-              <!-- Clear search button if search query is active -->
-              <button
-                v-if="searchQuery"
-                type="button"
-                class="flex items-center gap-1.5 rounded-full bg-zinc-800/50 px-3.5 py-2 text-xs font-medium text-zinc-400 ring-1 ring-white/5 transition active:scale-95 hover:text-zinc-200"
-                @click="searchQuery = ''"
-              >
-                <X :size="13" />
-                <span>Clear search</span>
-              </button>
-            </div>
-          </div>
-
-          <ul v-else class="space-y-2">
-            <li
-              v-for="track in filteredTracks"
-              :key="track.id"
-              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 ring-white/[0.06] transition active:scale-[0.99] active:bg-zinc-800/80"
-              :class="{ 'bg-indigo-950/30 ring-indigo-500/30': currentTrack?.id === track.id }"
-            >
-              <!-- Song Info & Thumbnail (Tap navigates to player without pausing) -->
-              <div
-                class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 pr-2"
-                @click="playTrackAndShow(track)"
-              >
-                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10">
-                  <img :src="track.coverUrl" alt="" class="h-full w-full object-cover" />
-                  <div
-                    v-if="currentTrack?.id === track.id"
-                    class="absolute inset-0 flex items-center justify-center bg-black/50"
-                  >
-                    <span
-                      v-for="n in 3"
-                      :key="n"
-                      class="animate-eq mx-[1px] h-3.5 w-1 origin-bottom rounded-full bg-indigo-400"
-                      :style="{ animationDelay: `${n * 0.15}s`, animationPlayState: isPlaying ? 'running' : 'paused' }"
-                    ></span>
-                  </div>
-                </div>
-
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5">
-                    <p
-                      class="truncate text-sm font-semibold"
-                      :class="currentTrack?.id === track.id ? 'text-indigo-300' : 'text-zinc-100'"
-                    >
-                      {{ track.title }}
-                    </p>
-                    <span
-                      v-if="track.id.startsWith('radio-')"
-                      class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
-                    >
-                      RADIO
-                    </span>
-                    <span
-                      v-else-if="track.kind === 'stream'"
-                      class="shrink-0 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400 ring-1 ring-indigo-500/30"
-                    >
-                      ONLINE
-                    </span>
-                  </div>
-                  <p class="truncate text-xs text-zinc-400">{{ track.artist }}</p>
-                </div>
-              </div>
-
-              <!-- Actions: Duration + Favorite + Circular Play + Delete -->
-              <div class="flex shrink-0 items-center gap-2">
-                <span
-                  v-if="track.id.startsWith('radio-')"
-                  class="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                  LIVE
-                </span>
-                <span v-else class="text-xs tabular-nums text-zinc-500">
-                  {{ formatTrackDuration(track.duration) }}
-                </span>
-
-                <!-- Favorite Heart Button -->
-                <button
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition active:scale-90"
-                  :class="{ 'text-rose-500': likedIds.has(track.id) }"
-                  :aria-label="likedIds.has(track.id) ? 'Unlike' : 'Like'"
-                  @click.stop="toggleLike(track.id)"
-                >
-                  <Heart :size="15" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" />
-                </button>
-
-                <!-- Circular Play Button (Explicitly toggles playback) -->
-                <button
-                  type="button"
-                  class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition active:scale-90 active:bg-white/20"
-                  :aria-label="currentTrack?.id === track.id && isPlaying ? 'Pause' : 'Play'"
-                  @click.stop="toggleTrackPlayback(track)"
-                >
-                  <Pause v-if="currentTrack?.id === track.id && isPlaying" :size="15" fill="currentColor" />
-                  <Play v-else :size="15" fill="currentColor" class="translate-x-0.5" />
-                </button>
-
-                <!-- Remove button for local files -->
-                <button
-                  v-if="track.kind === 'local'"
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 opacity-60 transition active:scale-90 active:text-zinc-200 hover:opacity-100 hover:text-zinc-300"
-                  :aria-label="`Remove ${track.title} from playlist`"
-                  title="Remove from playlist"
-                  @click.stop="promptRemoveTrack(track.id, track.title)"
-                >
-                  <MinusCircle :size="15" />
-                </button>
-              </div>
-            </li>
-          </ul>
-        </section>
-      </div>
-
-      <!-- ============================================================== -->
-      <!-- UNIFIED BOTTOM MINI-PLAYER BAR                                 -->
-      <!-- ============================================================== -->
-      <div
-        v-if="currentTrack && selectedFilter !== 'tv' && !activePlayingChannel"
-        class="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-30"
-      >
-        <div
-          class="relative flex flex-col overflow-hidden rounded-2xl bg-zinc-900/95 p-2 shadow-2xl ring-1 ring-white/15 backdrop-blur-xl transition active:scale-[0.99]"
-        >
-          <!-- Top subtle progress stripe -->
-          <div class="absolute inset-x-0 top-0 h-[2px] bg-zinc-800">
-            <div
-              class="h-full bg-indigo-500 transition-all duration-150"
-              :style="{ width: `${progressPercent}%` }"
-            ></div>
-          </div>
-
-          <div class="flex items-center justify-between pt-1">
-            <!-- Left Info (Tap opens Now Playing) -->
-            <div
-              class="flex min-w-0 flex-1 cursor-pointer items-center gap-3"
-              @click="activeTab = 'player'"
-            >
-              <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10">
-                <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
-                <div
-                  v-if="isPlaying"
-                  class="absolute inset-0 flex items-center justify-center bg-black/40"
-                >
-                  <span
-                    v-for="n in 3"
-                    :key="n"
-                    class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-indigo-400"
-                    :style="{ animationDelay: `${n * 0.15}s` }"
-                  ></span>
-                </div>
-              </div>
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-xs font-bold text-zinc-100">{{ currentTrack.title }}</p>
-                <p class="truncate text-[11px] text-zinc-400">{{ currentTrack.artist }}</p>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-2 pl-2">
-              <!-- Favorite button in mini player -->
-              <button
-                type="button"
-                class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition active:scale-90"
-                :class="{ 'text-rose-500': likedIds.has(currentTrack.id) }"
-                :aria-label="likedIds.has(currentTrack.id) ? 'Unlike' : 'Like'"
-                @click.stop="toggleLike(currentTrack.id)"
-              >
-                <Heart :size="16" :fill="likedIds.has(currentTrack.id) ? 'currentColor' : 'none'" />
-              </button>
-
-              <!-- Play / Pause in mini player -->
-              <button
-                type="button"
-                class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90 hover:bg-zinc-100"
-                :aria-label="isPlaying ? 'Pause' : 'Play'"
-                @click.stop="player.togglePlay()"
-              >
-                <div v-if="isPlaying" class="flex items-center justify-center gap-1">
-                  <span class="h-3.5 w-1 rounded-full bg-zinc-950"></span>
-                  <span class="h-3.5 w-1 rounded-full bg-zinc-950"></span>
-                </div>
-                <Play v-else :size="16" fill="currentColor" class="translate-x-0.5" />
-              </button>
-
-              <!-- Expand indicator -->
-              <button
-                type="button"
-                class="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white"
-                aria-label="Expand player"
-                @click="activeTab = 'player'"
-              >
-                <Maximize2 :size="14" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============================================================== -->
-    <!-- VIEW 2: NOW PLAYING SCREEN                                     -->
-    <!-- ============================================================== -->
-    <div
-      v-show="activeTab === 'player'"
-      class="flex h-full flex-col justify-between px-6 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
-    >
-      <!-- Top Navigation Bar -->
-      <header class="flex items-center justify-between py-2">
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
-          aria-label="Back to library"
-          @click="activeTab = 'library'"
-        >
-          <ChevronLeft :size="20" aria-hidden="true" />
-        </button>
-
-        <h2 class="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-          Now Playing
-        </h2>
-
-        <!-- Top Right Actions: Up Next Queue & Sleep Timer -->
-        <div class="flex items-center gap-2">
-          <!-- Up Next Queue button -->
-          <button
-            type="button"
-            class="flex items-center gap-1.5 rounded-full bg-zinc-900/80 px-3 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-95 hover:text-white"
-            aria-label="Open queue"
-            @click="playlistOpen = true"
-          >
-            <ListMusic :size="15" />
-            <span>Up Next</span>
-          </button>
-
-          <!-- Sleep Timer button -->
-          <button
-            type="button"
-            class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 backdrop-blur-md"
-            :class="
-              sleep.isActive.value
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
-                : 'bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white'
-            "
-            aria-label="Open sleep timer"
-            @click="sleepOpen = true"
-          >
-            <Moon :size="14" />
-            <span>{{ sleepLabel }}</span>
-          </button>
-        </div>
-      </header>
-
-      <!-- Center Stage: Artwork Carousel Peek -->
-      <section class="relative my-auto flex items-center justify-center py-2" aria-label="Album artwork carousel">
-        <!-- Ambient glow centered strictly behind the artwork -->
-        <div
-          v-if="currentTrack"
-          class="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center"
-        >
-          <div
-            class="h-64 w-64 rounded-full bg-indigo-600/20 blur-3xl transition-all duration-700"
-            :class="isPlaying ? 'scale-110 opacity-70' : 'scale-90 opacity-30'"
-          ></div>
-        </div>
-
-        <div class="relative flex w-full items-center justify-center">
-          <!-- Left Peek Artwork (Previous Track) -->
-          <div
-            v-if="prevTrack"
-            class="absolute -left-3 z-0 h-44 w-12 cursor-pointer overflow-hidden rounded-2xl opacity-30 blur-[1px] transition-all duration-300 active:scale-95"
-            aria-label="Previous track artwork"
-            @click="player.previous()"
-          >
-            <img :src="prevTrack.coverUrl" alt="" class="h-full w-full object-cover" />
-          </div>
-
-          <!-- Center Active Artwork -->
-          <div
-            class="relative z-10 aspect-square w-[min(74vw,18rem)] overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl ring-1 ring-white/15 transition-all duration-500 ease-out"
-            :class="isPlaying ? 'scale-100 shadow-black/80' : 'scale-[0.88] opacity-80 shadow-black/60'"
-          >
-            <img
-              v-if="currentTrack"
-              :src="currentTrack.coverUrl"
-              :alt="`Artwork for ${currentTrack.title}`"
-              class="h-full w-full object-cover"
-              draggable="false"
-            />
-            <div v-else class="flex h-full w-full flex-col items-center justify-center gap-2 text-zinc-600">
-              <AudioLines :size="64" />
-              <span class="text-xs">No song loaded</span>
-            </div>
-          </div>
-
-          <!-- Right Peek Artwork (Next Track - exact match to upcoming queue/shuffle) -->
-          <div
-            v-if="nextTrack"
-            class="absolute -right-3 z-0 h-44 w-12 cursor-pointer overflow-hidden rounded-2xl opacity-30 blur-[1px] transition-all duration-300 active:scale-95"
-            aria-label="Next track artwork"
-            @click="player.next()"
-          >
-            <img :src="nextTrack.coverUrl" alt="" class="h-full w-full object-cover" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Bottom Audio Controls Card -->
-      <section class="shrink-0 space-y-4 pt-2">
-        <!-- Title, Artist & Like Button -->
-        <div class="flex items-center justify-between">
-          <div class="min-w-0 flex-1 pr-3">
-            <p class="truncate text-xs font-semibold text-zinc-400">
-              {{ currentTrack?.artist ?? 'Pulse Music' }}
-            </p>
-            <MarqueeText
-              :text="currentTrack?.title ?? 'Ready to Play'"
-              :active="activeTab === 'player'"
-              class="text-2xl font-bold tracking-tight text-white"
-            />
-          </div>
-
-          <!-- Like button -->
-          <button
-            v-if="currentTrack"
-            type="button"
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-900/80 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90"
-            :class="likedIds.has(currentTrack.id) ? 'text-rose-500 ring-rose-500/30' : 'text-zinc-400'"
-            :aria-label="likedIds.has(currentTrack.id) ? 'Unlike song' : 'Like song'"
-            @click="toggleLike(currentTrack.id)"
-          >
-            <Heart :size="20" :fill="likedIds.has(currentTrack.id) ? 'currentColor' : 'none'" />
-          </button>
-        </div>
-
-        <!-- Interactive Audio Waveform Scrubber -->
-        <WaveformScrubber
-          :track-id="currentTrack?.id ?? 'none'"
-          :current-time="currentTime"
-          :duration="duration"
-          :disabled="!currentTrack || duration <= 0"
-          @seek="player.seek"
+          :regions="tvRegions"
+          :categories="tvCategories"
+          :active-region="activeTvRegion"
+          :active-category="activeTvCategory"
+          :channels="filteredTvChannels"
+          :active-playing-channel="activePlayingChannel"
+          :is-loading="isLoadingTv"
+          :error="tvError"
+          :active-label="activeTvLabel"
+          :get-channel-status="getTvChannelStatus"
+          :get-channel-latency="getTvChannelLatency"
+          :get-network-strength="getTvNetworkStrength"
+          @select-region="onSelectTvRegion"
+          @select-category="onSelectTvCategory"
+          @refresh="selectTvRegion(activeTvRegion, true)"
+          @play-channel="onPlayTvChannel"
         />
 
-        <!-- Primary Transport Controls -->
-        <div class="flex items-center justify-between px-1 py-3">
-          <!-- Shuffle Button -->
-          <button
-            type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 active:scale-90"
-            :class="
-              isShuffle
-                ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.3)]'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05]'
-            "
-            :aria-label="isShuffle ? 'Disable shuffle' : 'Enable shuffle'"
-            @click="player.toggleShuffle()"
-          >
-            <Shuffle :size="19" stroke-width="2" />
-          </button>
+        <!-- 2. Live Radio View -->
+        <LiveRadioSection
+          v-else-if="selectedFilter === 'radio'"
+          :regions="radioRegions"
+          :categories="radioCategories"
+          :active-region="activeRadioRegion"
+          :active-category="activeRadioCategory"
+          :stations="filteredRadioStations"
+          :current-track="currentTrack"
+          :is-playing="isPlaying"
+          :is-loading="isLoadingRadio"
+          :error="radioError"
+          :active-label="activeRadioLabel"
+          :liked-ids="likedIds"
+          :get-station-status="getRadioStationStatus"
+          :get-station-latency="getRadioStationLatency"
+          :get-network-strength="getRadioNetworkStrength"
+          @select-region="onSelectRadioRegion"
+          @select-category="onSelectRadioCategory"
+          @refresh="fetchRadioStations(true)"
+          @play-station="playTrackAndShow"
+          @toggle-playback="toggleTrackPlayback"
+          @toggle-like="toggleLike"
+        />
 
-          <!-- 10s Backward Skip with "10" inside -->
-          <button
-            type="button"
-            class="relative flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 transition-all duration-200 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-90"
-            aria-label="Rewind 10 seconds"
-            @click="player.seekBy(-10)"
-          >
-            <RotateCcw :size="23" stroke-width="1.75" />
-            <span class="absolute text-[9px] font-black tracking-tighter">10</span>
-          </button>
-
-          <!-- Previous Track -->
-          <button
-            type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-full text-zinc-300 transition-all duration-200 hover:text-white hover:bg-white/[0.06] active:scale-90"
-            aria-label="Previous track"
-            @click="player.previous()"
-          >
-            <SkipBack :size="24" class="fill-current" />
-          </button>
-
-          <!-- Main Hero Play / Pause Button with Glowing Aura -->
-          <div class="relative flex items-center justify-center">
-            <!-- Pulsing ambient glow aura -->
-            <div
-              class="pointer-events-none absolute -inset-2.5 rounded-full bg-gradient-to-r from-indigo-500/35 via-indigo-400/25 to-violet-500/35 blur-xl transition-all duration-500"
-              :class="isPlaying ? 'opacity-100 scale-110' : 'opacity-0 scale-90'"
-            ></div>
-
-            <button
-              type="button"
-              class="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.25)] ring-4 ring-white/15 transition-all duration-200 active:scale-95 hover:scale-105 hover:bg-zinc-100 focus:outline-none"
-              :aria-label="isPlaying ? 'Pause' : 'Play'"
-              @click="player.togglePlay()"
-            >
-              <!-- Dual-pill sleek pause bars with breathing room -->
-              <div v-if="isPlaying" class="flex items-center justify-center gap-2">
-                <span class="h-6 w-2 rounded-full bg-zinc-950 shadow-sm"></span>
-                <span class="h-6 w-2 rounded-full bg-zinc-950 shadow-sm"></span>
-              </div>
-              <!-- Play triangle centered with optical offset -->
-              <Play
-                v-else
-                :size="30"
-                class="fill-zinc-950 text-zinc-950 translate-x-0.5"
-              />
-            </button>
+        <!-- 3. Music Library & Online Tracks View -->
+        <div v-else class="space-y-4">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-lg font-bold text-white">
+              {{
+                selectedFilter === 'online'
+                  ? activeGenreLabel
+                  : selectedFilter === 'liked'
+                    ? 'Liked'
+                    : selectedFilter === 'recent'
+                      ? 'Recent Tracks'
+                      : 'Your library'
+              }}
+            </h2>
+            <span class="text-xs font-medium text-zinc-500">
+              {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
+            </span>
           </div>
 
-          <!-- Next Track -->
-          <button
-            type="button"
-            class="flex h-12 w-12 items-center justify-center rounded-full text-zinc-300 transition-all duration-200 hover:text-white hover:bg-white/[0.06] active:scale-90"
-            aria-label="Next track"
-            @click="player.next()"
-          >
-            <SkipForward :size="24" class="fill-current" />
-          </button>
-
-          <!-- 10s Forward Skip with "10" inside -->
-          <button
-            type="button"
-            class="relative flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 transition-all duration-200 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-90"
-            aria-label="Forward 10 seconds"
-            @click="player.seekBy(10)"
-          >
-            <RotateCw :size="23" stroke-width="1.75" />
-            <span class="absolute text-[9px] font-black tracking-tighter">10</span>
-          </button>
-
-          <!-- Repeat Mode Button -->
-          <button
-            type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 active:scale-90"
-            :class="
-              repeatMode !== 'off'
-                ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.3)]'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05]'
-            "
-            :aria-label="`Repeat mode: ${repeatMode}`"
-            @click="player.cycleRepeat()"
-          >
-            <Repeat1 v-if="repeatMode === 'one'" :size="18" stroke-width="2.2" />
-            <Repeat v-else :size="18" stroke-width="2" />
-          </button>
+          <TrackList
+            :tracks="filteredTracks"
+            :current-track="currentTrack"
+            :is-playing="isPlaying"
+            :liked-ids="likedIds"
+            :is-importing="isImporting"
+            :selected-filter="selectedFilter"
+            :search-query="searchQuery"
+            :is-loading-online="isLoadingOnline"
+            :online-error="onlineError"
+            @play-track="playTrackAndShow"
+            @toggle-playback="toggleTrackPlayback"
+            @toggle-like="toggleLike"
+            @remove-track="promptRemoveTrack"
+            @open-file-picker="openFilePicker"
+            @select-online="selectOnlineFilter"
+            @clear-search="searchQuery = ''"
+            @retry-online="fetchOnlineTracks(true)"
+          />
         </div>
-      </section>
+      </div>
+
+      <!-- Bottom Mini-Player Bar -->
+      <MiniPlayerBar
+        v-if="currentTrack && selectedFilter !== 'tv' && !activePlayingChannel"
+        :current-track="currentTrack"
+        :is-playing="isPlaying"
+        :progress-percent="progressPercent"
+        :is-liked="likedIds.has(currentTrack.id)"
+        @toggle-play="player.togglePlay()"
+        @toggle-like="toggleLike"
+        @expand="activeTab = 'player'"
+      />
     </div>
 
     <!-- ============================================================== -->
-    <!-- UP NEXT QUEUE BOTTOM SHEET                                     -->
+    <!-- VIEW 2: NOW PLAYING FULLSCREEN                                 -->
     <!-- ============================================================== -->
-    <div
-      class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
-      :class="playlistOpen ? 'opacity-100' : 'pointer-events-none opacity-0'"
-      aria-hidden="true"
-      @click="playlistOpen = false"
-    ></div>
-
-    <aside
-      class="fixed inset-x-0 bottom-0 z-50 flex h-[78dvh] flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
-      :class="playlistOpen ? 'translate-y-0' : 'translate-y-full'"
-      :style="playlistDragOffset > 0 ? { transform: `translateY(${playlistDragOffset}px)`, transition: 'none' } : {}"
-      :inert="playlistOpen ? undefined : true"
-      role="dialog"
-      aria-label="Playlist queue"
-    >
-      <div
-        class="flex items-center justify-between px-6 pt-4 pb-2 cursor-grab active:cursor-grabbing"
-        @touchstart="onPlaylistTouchStart"
-        @touchmove="onPlaylistTouchMove"
-        @touchend="onPlaylistTouchEnd"
-        @touchcancel="onPlaylistTouchEnd"
-      >
-        <div>
-          <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
-          <h2 class="text-xl font-bold text-white">Up Next</h2>
-        </div>
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
-          aria-label="Close playlist"
-          @click="playlistOpen = false"
-        >
-          <ChevronDown :size="20" aria-hidden="true" />
-        </button>
-      </div>
-
-      <div
-        v-if="player.queue.value.length === 0"
-        class="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-10 text-center"
-      >
-        <ListMusic :size="40" class="text-zinc-600" aria-hidden="true" />
-        <p class="text-sm text-zinc-400">Your library is empty. Import audio files or discover online music.</p>
-        <div class="mt-2 flex flex-wrap items-center justify-center gap-2.5">
-          <button
-            type="button"
-            class="flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500"
-            @click="openFilePicker"
-          >
-            <Plus :size="14" />
-            <span>Import Audio</span>
-          </button>
-          <button
-            type="button"
-            class="flex items-center gap-1.5 rounded-full bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 transition active:scale-95 hover:bg-zinc-700 hover:text-white"
-            @click="closeSheets(); selectOnlineFilter(); activeTab = 'library'"
-          >
-            <Globe :size="14" class="text-indigo-400" />
-            <span>Online Music</span>
-          </button>
-        </div>
-      </div>
-
-      <ul v-else class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 space-y-1.5" aria-label="Queued tracks">
-        <li
-          v-for="track in player.queue.value"
-          :key="track.id"
-          class="flex items-center justify-between rounded-2xl p-2.5 transition active:bg-zinc-800/80"
-          :class="currentTrack?.id === track.id ? 'bg-indigo-950/40 ring-1 ring-indigo-500/30' : 'bg-zinc-800/40'"
-        >
-          <button
-            type="button"
-            class="flex min-w-0 flex-1 items-center gap-3 text-left"
-            @click="selectQueueTrack(track)"
-          >
-            <div class="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-zinc-800">
-              <img :src="track.coverUrl" alt="" class="h-full w-full object-cover" />
-              <div
-                v-if="currentTrack?.id === track.id"
-                class="absolute inset-0 flex items-center justify-center bg-black/40"
-              >
-                <span
-                  v-for="n in 3"
-                  :key="n"
-                  class="animate-eq mx-[1px] h-3 w-0.5 rounded-full bg-indigo-400"
-                  :style="{ animationDelay: `${n * 0.15}s` }"
-                ></span>
-              </div>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <p
-                class="truncate text-sm font-semibold"
-                :class="currentTrack?.id === track.id ? 'text-indigo-300' : 'text-zinc-100'"
-              >
-                {{ track.title }}
-              </p>
-              <p class="truncate text-xs text-zinc-400">{{ track.artist }}</p>
-            </div>
-          </button>
-
-          <div class="flex items-center gap-2 pl-2">
-            <span class="text-xs tabular-nums text-zinc-500">{{ formatTrackDuration(track.duration) }}</span>
-            <button
-              v-if="track.kind === 'local'"
-              type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition active:scale-90 active:text-zinc-200 hover:text-zinc-300"
-              :aria-label="`Remove ${track.title} from playlist`"
-              title="Remove from playlist"
-              @click="promptRemoveTrack(track.id, track.title)"
-            >
-              <MinusCircle :size="16" />
-            </button>
-          </div>
-        </li>
-      </ul>
-    </aside>
+    <NowPlayingView
+      v-show="activeTab === 'player'"
+      :current-track="currentTrack"
+      :prev-track="prevTrack"
+      :next-track="nextTrack"
+      :is-playing="isPlaying"
+      :current-time="currentTime"
+      :duration="duration"
+      :is-shuffle="isShuffle"
+      :repeat-mode="repeatMode"
+      :is-liked="currentTrack ? likedIds.has(currentTrack.id) : false"
+      :sleep-label="sleepLabel"
+      :is-sleep-active="sleep.isActive.value"
+      :active-tab="activeTab"
+      @back="activeTab = 'library'"
+      @open-queue="playlistOpen = true"
+      @open-sleep="sleepOpen = true"
+      @toggle-play="player.togglePlay()"
+      @toggle-shuffle="player.toggleShuffle()"
+      @cycle-repeat="player.cycleRepeat()"
+      @previous="player.previous()"
+      @next="player.next()"
+      @seek="player.seek"
+      @seek-by="player.seekBy"
+      @toggle-like="toggleLike"
+    />
 
     <!-- ============================================================== -->
-    <!-- SLEEP TIMER BOTTOM SHEET                                       -->
+    <!-- DRAWERS & MODALS                                               -->
     <!-- ============================================================== -->
-    <div
-      class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
-      :class="sleepOpen ? 'opacity-100' : 'pointer-events-none opacity-0'"
-      aria-hidden="true"
-      @click="sleepOpen = false"
-    ></div>
 
-    <aside
-      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
-      :class="sleepOpen ? 'translate-y-0' : 'translate-y-full'"
-      :style="sleepDragOffset > 0 ? { transform: `translateY(${sleepDragOffset}px)`, transition: 'none' } : {}"
-      :inert="sleepOpen ? undefined : true"
-      role="dialog"
-      aria-label="Sleep timer"
-    >
-      <div
-        class="flex items-center justify-between px-6 pt-4 pb-2 cursor-grab active:cursor-grabbing"
-        @touchstart="onSleepTouchStart"
-        @touchmove="onSleepTouchMove"
-        @touchend="onSleepTouchEnd"
-        @touchcancel="onSleepTouchEnd"
-      >
-        <div>
-          <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
-          <h2 class="text-xl font-bold text-white">Sleep Timer</h2>
-        </div>
-        <button
-          type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
-          aria-label="Close sleep timer"
-          @click="sleepOpen = false"
-        >
-          <ChevronDown :size="20" aria-hidden="true" />
-        </button>
-      </div>
+    <!-- Right Side Push Menu -->
+    <SideMenuDrawer
+      v-model:open="menuOpen"
+      :active-tab="activeTab"
+      :selected-filter="selectedFilter"
+      :local-count="localCount"
+      @close="menuOpen = false"
+      @navigate="(f) => { selectedFilter = f; activeTab = 'library' }"
+    />
 
-      <ul class="px-4 pt-2 space-y-1" aria-label="Sleep timer options">
-        <li v-for="minutes in SLEEP_MINUTE_OPTIONS" :key="minutes">
-          <button
-            type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-zinc-800"
-            :class="sleep.selection.value === minutes ? 'bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/40' : 'text-zinc-200'"
-            @click="chooseSleepMinutes(minutes)"
-          >
-            <span>{{ minutes }} minutes</span>
-            <Check v-if="sleep.selection.value === minutes" :size="18" class="text-indigo-400" aria-hidden="true" />
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-zinc-800"
-            :class="sleep.selection.value === 'track' ? 'bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/40' : 'text-zinc-200'"
-            @click="chooseSleepEndOfTrack"
-          >
-            <span>End of current track</span>
-            <Check v-if="sleep.selection.value === 'track'" :size="18" class="text-indigo-400" aria-hidden="true" />
-          </button>
-        </li>
-        <li v-if="sleep.isActive.value">
-          <button
-            type="button"
-            class="mt-2 flex min-h-12 w-full items-center justify-center rounded-2xl bg-red-950/40 px-4 text-sm font-semibold text-red-400 ring-1 ring-red-500/30 transition active:bg-red-900/50"
-            @click="turnOffSleep"
-          >
-            Turn off timer
-          </button>
-        </li>
-      </ul>
-    </aside>
+    <!-- Up Next Queue Sheet -->
+    <UpNextDrawer
+      v-model:open="playlistOpen"
+      :queue="player.queue.value"
+      :current-track="currentTrack"
+      @close="playlistOpen = false"
+      @select-track="selectQueueTrack"
+      @remove-track="promptRemoveTrack"
+      @import-audio="openFilePicker"
+      @discover-online="() => { playlistOpen = false; selectOnlineFilter(); activeTab = 'library' }"
+    />
 
-    <!-- ============================================================== -->
-    <!-- CUSTOM REMOVE CONFIRMATION MODAL                               -->
-    <!-- ============================================================== -->
-    <transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="trackToRemove"
-        class="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/80 backdrop-blur-md"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="remove-dialog-title"
-        @click.self="cancelRemoveTrack"
-      >
-        <div
-          class="relative w-full max-w-xs overflow-hidden rounded-[2rem] bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 text-center shadow-2xl ring-1 ring-white/15"
-        >
-          <!-- Header Icon -->
-          <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30">
-            <MinusCircle :size="26" />
-          </div>
+    <!-- Sleep Timer Sheet -->
+    <SleepTimerDrawer
+      v-model:open="sleepOpen"
+      :active-selection="sleep.selection.value"
+      :is-active="sleep.isActive.value"
+      @close="sleepOpen = false"
+      @choose-minutes="chooseSleepMinutes"
+      @choose-end-of-track="chooseSleepEndOfTrack"
+      @turn-off="turnOffSleep"
+    />
 
-          <!-- Title & Track Name -->
-          <h3 id="remove-dialog-title" class="text-base font-bold text-white">
-            Remove from Playlist?
-          </h3>
-          <p class="mt-2 text-xs leading-relaxed text-zinc-400">
-            <span class="font-semibold text-zinc-200">“{{ trackToRemove.title }}”</span> will be removed from your active playlist.
-          </p>
+    <!-- Custom Remove Confirmation Modal -->
+    <RemoveConfirmModal
+      :track="trackToRemove"
+      @confirm="confirmRemoveTrack"
+      @cancel="cancelRemoveTrack"
+    />
 
-          <!-- Reassurance Note Badge -->
-          <div class="mt-3.5 inline-flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-3 py-1 text-[11px] font-medium text-zinc-400 ring-1 ring-white/5">
-            <Check :size="12" class="text-emerald-400" />
-            <span>Your original file stays safe on device</span>
-          </div>
-
-          <!-- Actions Row -->
-          <div class="mt-6 flex flex-col gap-2">
-            <button
-              type="button"
-              class="w-full rounded-2xl bg-white py-3 text-xs font-bold text-zinc-950 shadow-lg shadow-white/10 transition active:scale-[0.98] hover:bg-zinc-100"
-              @click="confirmRemoveTrack"
-            >
-              Remove from Playlist
-            </button>
-            <button
-              type="button"
-              class="w-full rounded-2xl bg-zinc-800/70 py-3 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 transition active:scale-[0.98] hover:text-white hover:bg-zinc-800"
-              @click="cancelRemoveTrack"
-            >
-              Keep Song
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- ============================================================== -->
-    <!-- RIGHT SIDE PUSH MENU DRAWER                                    -->
-    <!-- ============================================================== -->
-    <!-- Backdrop Overlay -->
-    <div
-      class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
-      :class="menuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'"
-      aria-hidden="true"
-      @click="menuOpen = false"
-    ></div>
-
-    <!-- Side Push Drawer -->
-    <aside
-      class="fixed inset-y-0 right-0 z-50 flex w-80 max-w-[85vw] flex-col justify-between bg-zinc-900/95 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition-transform duration-300 ease-out"
-      :class="menuOpen ? 'translate-x-0' : 'translate-x-full'"
-      :style="menuDragOffset > 0 ? { transform: `translateX(${menuDragOffset}px)`, transition: 'none' } : {}"
-      :inert="menuOpen ? undefined : true"
-      role="dialog"
-      aria-label="Navigation and about menu"
-      @touchstart="onMenuTouchStart"
-      @touchmove="onMenuTouchMove"
-      @touchend="onMenuTouchEnd"
-      @touchcancel="onMenuTouchEnd"
-    >
-      <!-- Top Scrollable Section -->
-      <div class="flex-1 overflow-y-auto px-5 space-y-6">
-        <!-- Drawer Header -->
-        <div class="flex items-center justify-between pb-3 border-b border-white/[0.08]">
-          <div class="flex items-center gap-2.5">
-            <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400 ring-1 ring-indigo-500/30">
-              <AudioLines :size="16" />
-            </div>
-            <h2 class="text-base font-bold text-white tracking-tight">Menu</h2>
-          </div>
-          <button
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
-            aria-label="Close menu"
-            @click="menuOpen = false"
-          >
-            <X :size="18" />
-          </button>
-        </div>
-
-        <!-- Quick Navigation Section -->
-        <div class="space-y-1.5">
-          <p class="px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-            Navigation
-          </p>
-          <div class="space-y-1">
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
-              :class="selectedFilter === 'all' && activeTab === 'library' ? 'bg-indigo-950/40 text-indigo-300 ring-1 ring-indigo-500/30' : 'text-zinc-200'"
-              @click="selectedFilter = 'all'; activeTab = 'library'; menuOpen = false"
-            >
-              <div class="flex items-center gap-2.5">
-                <Music :size="16" class="text-indigo-400" />
-                <span>Offline Music</span>
-              </div>
-              <span class="rounded-full bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-400 font-medium">
-                {{ localCount }}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
-              :class="selectedFilter === 'online' && activeTab === 'library' ? 'bg-indigo-950/40 text-indigo-300 ring-1 ring-indigo-500/30' : 'text-zinc-200'"
-              @click="selectOnlineFilter(); activeTab = 'library'; menuOpen = false"
-            >
-              <div class="flex items-center gap-2.5">
-                <Globe :size="16" class="text-indigo-400" />
-                <span>Online Music</span>
-              </div>
-              <ChevronRight :size="14" class="text-zinc-500" />
-            </button>
-
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
-              :class="selectedFilter === 'radio' && activeTab === 'library' ? 'bg-rose-950/40 text-rose-300 ring-1 ring-rose-500/30' : 'text-zinc-200'"
-              @click="selectRadioFilter(); activeTab = 'library'; menuOpen = false"
-            >
-              <div class="flex items-center gap-2.5">
-                <Radio :size="16" class="text-rose-400" />
-                <span>Live Radio</span>
-              </div>
-              <ChevronRight :size="14" class="text-zinc-500" />
-            </button>
-
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
-              :class="selectedFilter === 'tv' && activeTab === 'library' ? 'bg-amber-950/40 text-amber-300 ring-1 ring-amber-500/30' : 'text-zinc-200'"
-              @click="selectTvFilter(); activeTab = 'library'; menuOpen = false"
-            >
-              <div class="flex items-center gap-2.5">
-                <Tv :size="16" class="text-amber-400" />
-                <span>Live TV</span>
-              </div>
-              <ChevronRight :size="14" class="text-zinc-500" />
-            </button>
-          </div>
-        </div>
-
-        <!-- About Section -->
-        <div class="space-y-2">
-          <div class="flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-            <Info :size="12" />
-            <span>About</span>
-          </div>
-
-          <!-- About Card -->
-          <div class="rounded-2xl bg-zinc-800/40 p-4 ring-1 ring-white/[0.08] space-y-3.5">
-            <div class="flex items-start gap-3">
-              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-indigo-400 shadow-md shadow-indigo-600/30 ring-1 ring-white/20">
-                <AudioLines :size="20" class="text-white" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <h3 class="text-sm font-bold text-white">Pulse Player</h3>
-                  <span class="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold text-indigo-300 ring-1 ring-indigo-500/30">
-                    v1.0.0
-                  </span>
-                </div>
-                <p class="text-[11px] text-zinc-400 leading-tight mt-0.5">
-                  Private, offline-first media hub for music, radio, and television.
-                </p>
-              </div>
-            </div>
-
-            <!-- Check for Update Button & Status -->
-            <div class="space-y-2 pt-1 border-t border-white/[0.06]">
-              <button
-                type="button"
-                class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 ring-1 ring-white/20 transition active:scale-[0.98] hover:bg-indigo-500 disabled:opacity-60"
-                :disabled="isCheckingUpdate"
-                @click="checkForUpdate"
-              >
-                <RefreshCw
-                  :size="14"
-                  :class="{ 'animate-spin': isCheckingUpdate }"
-                />
-                <span>{{ isCheckingUpdate ? 'Checking for updates...' : 'Check for update' }}</span>
-              </button>
-
-              <!-- Update Status Alert -->
-              <transition
-                enter-active-class="transition duration-150 ease-out"
-                enter-from-class="-translate-y-1 opacity-0"
-                enter-to-class="translate-y-0 opacity-100"
-              >
-                <div
-                  v-if="updateStatus === 'latest'"
-                  class="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-2.5 text-[11px] font-medium text-emerald-400 ring-1 ring-emerald-500/20"
-                >
-                  <Check :size="13" class="shrink-0" />
-                  <span>Pulse is up to date (checked {{ lastUpdateChecked }})</span>
-                </div>
-
-                <div
-                  v-else-if="updateStatus === 'update_available'"
-                  class="flex flex-col gap-2 rounded-xl bg-amber-500/15 p-2.5 text-[11px] text-amber-200 ring-1 ring-amber-500/30"
-                >
-                  <div class="flex items-center gap-1.5 font-semibold text-amber-300">
-                    <Sparkles :size="13" />
-                    <span>New version available!</span>
-                  </div>
-                  <button
-                    type="button"
-                    class="rounded-lg bg-amber-500 py-1.5 px-3 text-[11px] font-bold text-zinc-950 transition active:scale-95 hover:bg-amber-400"
-                    @click="applyUpdate"
-                  >
-                    Reload to Update
-                  </button>
-                </div>
-
-                <div
-                  v-else-if="updateStatus === 'error'"
-                  class="rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-400 ring-1 ring-rose-500/20"
-                >
-                  Unable to check for updates. Check internet connection.
-                </div>
-              </transition>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bottom Drawer Footer -->
-      <div class="px-5 pt-3 border-t border-white/[0.08]">
-        <div class="flex items-center justify-between text-[11px] text-zinc-500">
-          <div class="flex items-center gap-1.5 text-zinc-400">
-            <ShieldCheck :size="13" class="text-emerald-400" />
-            <span>Zero tracking · 100% private</span>
-          </div>
-          <span class="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[9px] text-zinc-400">PWA</span>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Live TV Player Modal (HLS.js / Safari Native) -->
+    <!-- Live TV Cinema Player Modal -->
     <LiveTvModal
       v-if="activePlayingChannel"
       :channel="activePlayingChannel"
