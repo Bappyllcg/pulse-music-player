@@ -45,8 +45,35 @@ const isFullscreen = ref(false)
 const showChannelDrawer = ref(true)
 
 let hlsInstance: Hls | null = null
+const autoSkipCountdown = ref<number | null>(null)
+let autoSkipTimer: number | undefined
+
+function cancelAutoSkip(): void {
+  if (autoSkipTimer) {
+    window.clearInterval(autoSkipTimer)
+    autoSkipTimer = undefined
+  }
+  autoSkipCountdown.value = null
+}
+
+function triggerAutoSkip(): void {
+  cancelAutoSkip()
+  autoSkipCountdown.value = 2
+  autoSkipTimer = window.setInterval(() => {
+    if (autoSkipCountdown.value === null) {
+      cancelAutoSkip()
+      return
+    }
+    autoSkipCountdown.value--
+    if (autoSkipCountdown.value <= 0) {
+      cancelAutoSkip()
+      emit('next')
+    }
+  }, 1000)
+}
 
 function cleanUpHls(): void {
+  cancelAutoSkip()
   if (hlsInstance) {
     hlsInstance.destroy()
     hlsInstance = null
@@ -66,7 +93,8 @@ function loadChannelStream(channel: TvChannel): void {
     isBuffering.value = false
     setChannelStatus(channel.id, 'offline')
     streamError.value =
-      'This stream uses unencrypted HTTP (raw IP) and cannot be loaded over HTTPS due to browser security restrictions. Tap Next Channel to continue.'
+      'This stream uses unencrypted HTTP (raw IP) and cannot be loaded over HTTPS due to browser security restrictions.'
+    triggerAutoSkip()
     return
   }
 
@@ -100,6 +128,7 @@ function loadChannelStream(channel: TvChannel): void {
               streamError.value =
                 'Stream connection failed. This channel may be temporarily offline or restricted by CORS.'
               isBuffering.value = false
+              triggerAutoSkip()
             }
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
@@ -110,6 +139,7 @@ function loadChannelStream(channel: TvChannel): void {
             setChannelStatus(channel.id, 'offline')
             streamError.value = 'Stream connection lost. This channel may be temporarily offline.'
             isBuffering.value = false
+            triggerAutoSkip()
             break
         }
       }
@@ -129,6 +159,7 @@ function loadChannelStream(channel: TvChannel): void {
       setChannelStatus(channel.id, 'offline')
       streamError.value = 'Unable to stream this channel. Format or CORS error.'
       isBuffering.value = false
+      triggerAutoSkip()
     })
   } else {
     streamError.value = 'HLS streaming is not supported on this browser.'
@@ -137,6 +168,7 @@ function loadChannelStream(channel: TvChannel): void {
 }
 
 function onVideoPlaying(): void {
+  cancelAutoSkip()
   isBuffering.value = false
   streamError.value = null
   if (props.channel) {
@@ -242,9 +274,9 @@ onBeforeUnmount(() => {
             <!-- Status Badge -->
             <span
               v-if="getChannelStatus(channel.id) === 'offline'"
-              class="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-bold text-zinc-400 ring-1 ring-white/10"
+              class="inline-flex items-center gap-1 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 ring-1 ring-amber-500/20"
             >
-              <span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+              <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
               OFFLINE
             </span>
             <span
@@ -318,31 +350,42 @@ onBeforeUnmount(() => {
         <p class="mt-3 text-xs font-semibold text-zinc-300">Tuning in live stream...</p>
       </div>
 
-      <!-- Stream Error Overlay -->
+      <!-- Stream Error Overlay with Auto-Skip -->
       <div
         v-if="streamError"
         class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/90 p-6 text-center"
       >
-        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-rose-400 ring-1 ring-red-500/30">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/30">
           <Tv :size="24" />
         </div>
-        <h3 class="mt-3 text-sm font-bold text-white">Stream Unavailable</h3>
+        <h3 class="mt-3 text-sm font-bold text-white">Stream Offline</h3>
         <p class="mt-1 max-w-xs text-xs text-zinc-400">{{ streamError }}</p>
-        <div class="mt-4 flex items-center gap-3">
+        <p v-if="autoSkipCountdown !== null" class="mt-2 text-xs font-semibold text-amber-400 animate-pulse">
+          Skipping to next live channel in {{ autoSkipCountdown }}s...
+        </p>
+        <div class="mt-4 flex items-center gap-2.5">
+          <button
+            v-if="autoSkipCountdown !== null"
+            type="button"
+            class="flex items-center gap-1 rounded-full bg-zinc-800 px-3.5 py-2 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 active:scale-95 hover:bg-zinc-700"
+            @click="cancelAutoSkip"
+          >
+            <span>Stay</span>
+          </button>
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-indigo-500"
-            @click="loadChannelStream(channel)"
+            class="flex items-center gap-1.5 rounded-full bg-zinc-800 px-3.5 py-2 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 active:scale-95 hover:bg-zinc-700"
+            @click="cancelAutoSkip(); loadChannelStream(channel)"
           >
             <RefreshCw :size="13" />
             <span>Retry</span>
           </button>
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-full bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 active:scale-95 hover:bg-zinc-700"
-            @click="emit('next')"
+            class="flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-indigo-500"
+            @click="cancelAutoSkip(); emit('next')"
           >
-            <span>Next Channel</span>
+            <span>Skip Now</span>
             <ChevronRight :size="13" />
           </button>
         </div>
@@ -403,7 +446,7 @@ onBeforeUnmount(() => {
           <span class="truncate max-w-[120px]">{{ ch.cleanName }}</span>
           <span
             v-if="getChannelStatus(ch.id) === 'offline'"
-            class="rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold text-zinc-400 ring-1 ring-white/10"
+            class="rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-amber-400/90 ring-1 ring-amber-500/20"
           >
             Offline
           </span>

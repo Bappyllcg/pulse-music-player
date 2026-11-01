@@ -487,11 +487,11 @@ export function setChannelStatus(channelId: string, status: ChannelHealthStatus)
 
 /**
  * Checks whether an HLS stream is active and responding.
- * Uses a lightweight GET with Range: bytes=0-100 to avoid consuming video bandwidth.
+ * Fast 1200ms timeout with byte range request skips broken/dead streams immediately.
  */
 export async function checkChannelHealth(
   channel: TvChannel,
-  timeoutMs = 3500,
+  timeoutMs = 1200,
 ): Promise<'online' | 'offline'> {
   const sanitized = sanitizeStreamUrl(channel.url)
   if (!sanitized) {
@@ -523,11 +523,12 @@ export async function checkChannelHealth(
 }
 
 /**
- * Runs a background health check over target channels with a concurrency pool.
+ * Runs a rapid background health check prioritizing the visible relevant channels.
+ * Runs 10 concurrent checks and skips dead streams within ~1.2s.
  */
 export async function runBackgroundHealthCheck(
   targetChannels: TvChannel[],
-  concurrency = 4,
+  concurrency = 10,
 ): Promise<void> {
   if (!targetChannels || targetChannels.length === 0) return
 
@@ -539,21 +540,19 @@ export async function runBackgroundHealthCheck(
   activeHealthCheckAbortController = controller
   const { signal } = controller
 
-  // Find channels that haven't been validated yet in this session
-  const pending = targetChannels.filter((ch) => {
-    const status = channelHealth.value[ch.id]
-    return !status || status === 'unknown'
-  })
+  // Check top relevant/visible channels first to make response instant
+  const pending = targetChannels
+    .filter((ch) => {
+      const status = channelHealth.value[ch.id]
+      return !status || status === 'unknown'
+    })
+    .slice(0, 35)
 
   if (pending.length === 0) {
     return
   }
 
   isCheckingHealth.value = true
-
-  for (const ch of pending) {
-    channelHealth.value[ch.id] = 'checking'
-  }
 
   let index = 0
 
@@ -563,7 +562,7 @@ export async function runBackgroundHealthCheck(
       const ch = pending[index++]
       if (!ch) break
 
-      const status = await checkChannelHealth(ch)
+      const status = await checkChannelHealth(ch, 1200)
       if (!signal.aborted) {
         channelHealth.value[ch.id] = status
         persistHealthCache()
@@ -740,16 +739,32 @@ export function useLiveTv() {
     const list = filteredChannels.value
     if (list.length === 0) return
     const curIdx = list.findIndex((c) => c.id === activePlayingChannel.value?.id)
-    const nextIdx = (curIdx + 1) % list.length
-    activePlayingChannel.value = list[nextIdx]
+
+    // Skip offline channels and find next live channel
+    for (let step = 1; step <= list.length; step++) {
+      const nextIdx = (curIdx + step) % list.length
+      const candidate = list[nextIdx]
+      if (getChannelStatus(candidate.id) !== 'offline' || step === list.length) {
+        activePlayingChannel.value = candidate
+        return
+      }
+    }
   }
 
   function playPrevChannel(): void {
     const list = filteredChannels.value
     if (list.length === 0) return
     const curIdx = list.findIndex((c) => c.id === activePlayingChannel.value?.id)
-    const prevIdx = (curIdx - 1 + list.length) % list.length
-    activePlayingChannel.value = list[prevIdx]
+
+    // Skip offline channels and find prev live channel
+    for (let step = 1; step <= list.length; step++) {
+      const prevIdx = (curIdx - step + list.length) % list.length
+      const candidate = list[prevIdx]
+      if (getChannelStatus(candidate.id) !== 'offline' || step === list.length) {
+        activePlayingChannel.value = candidate
+        return
+      }
+    }
   }
 
   return {

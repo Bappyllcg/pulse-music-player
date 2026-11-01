@@ -75,7 +75,6 @@ const {
   channels: tvChannels,
   filteredChannels: filteredTvChannels,
   isLoadingTv,
-  isCheckingHealth,
   tvError,
   activeRegion: activeTvRegion,
   activeCategory: activeTvCategory,
@@ -158,6 +157,12 @@ async function selectRadioFilter(): Promise<void> {
     await selectRadioCategory(activeRadioCategoryId.value)
   }
 }
+
+const hideOfflineChannels = ref(false)
+const displayedTvChannels = computed(() => {
+  if (!hideOfflineChannels.value) return filteredTvChannels.value
+  return filteredTvChannels.value.filter((ch) => getTvChannelStatus(ch.id) !== 'offline')
+})
 
 async function selectTvFilter(): Promise<void> {
   selectedFilter.value = 'tv'
@@ -832,7 +837,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex items-center gap-2">
               <span
-                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio) || (selectedFilter === 'tv' && (isLoadingTv || isCheckingHealth))) && (selectedFilter === 'tv' ? filteredTvChannels.length > 0 : filteredTracks.length > 0)"
+                v-if="((selectedFilter === 'online' && isLoadingOnline) || (selectedFilter === 'radio' && isLoadingRadio) || (selectedFilter === 'tv' && isLoadingTv)) && (selectedFilter === 'tv' ? displayedTvChannels.length > 0 : filteredTracks.length > 0)"
                 class="flex items-center gap-1 text-[11px] font-medium"
                 :class="selectedFilter === 'tv' ? 'text-amber-400' : selectedFilter === 'radio' ? 'text-rose-400' : 'text-indigo-400'"
               >
@@ -840,11 +845,11 @@ onBeforeUnmount(() => {
                   class="h-1.5 w-1.5 rounded-full animate-ping"
                   :class="selectedFilter === 'tv' ? 'bg-amber-400' : selectedFilter === 'radio' ? 'bg-rose-400' : 'bg-indigo-400'"
                 ></span>
-                <span>{{ selectedFilter === 'tv' ? (isLoadingTv ? 'Updating...' : 'Checking streams...') : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
+                <span>{{ selectedFilter === 'tv' ? 'Updating...' : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
               </span>
               <span class="text-xs font-medium text-zinc-500">
                 <template v-if="selectedFilter === 'tv'">
-                  <span>{{ filteredTvChannels.length }} channels</span>
+                  <span>{{ displayedTvChannels.length }} channels</span>
                   <template v-if="tvStats.totalChecked > 0">
                     <span class="mx-1 text-zinc-600">•</span>
                     <span class="text-emerald-400 font-semibold">{{ tvStats.onlineCount }} live</span>
@@ -857,6 +862,22 @@ onBeforeUnmount(() => {
                   }}
                 </template>
               </span>
+              <!-- Toggle Skip/Hide Offline -->
+              <button
+                v-if="selectedFilter === 'tv' && tvStats.offlineCount > 0"
+                type="button"
+                class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition active:scale-95"
+                :class="
+                  hideOfflineChannels
+                    ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30'
+                    : 'bg-zinc-800 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+                "
+                :title="hideOfflineChannels ? 'Show all channels' : 'Hide offline channels from list'"
+                @click="hideOfflineChannels = !hideOfflineChannels"
+              >
+                <span class="h-1.5 w-1.5 rounded-full" :class="hideOfflineChannels ? 'bg-emerald-400' : 'bg-zinc-500'"></span>
+                <span>{{ hideOfflineChannels ? 'Live Only' : 'Skip Offline' }}</span>
+              </button>
             </div>
           </div>
 
@@ -899,7 +920,7 @@ onBeforeUnmount(() => {
           <!-- Live TV Channel Grid -->
           <div v-else-if="selectedFilter === 'tv'" class="space-y-2">
             <div
-              v-for="ch in filteredTvChannels"
+              v-for="ch in displayedTvChannels"
               :key="ch.id"
               class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 transition active:scale-[0.99] cursor-pointer hover:bg-zinc-800/60"
               :class="
@@ -946,31 +967,20 @@ onBeforeUnmount(() => {
 
               <div class="flex shrink-0 items-center gap-2">
                 <!-- Status Badge -->
-                <!-- Online / Live -->
                 <span
-                  v-if="getTvChannelStatus(ch.id) === 'online' || getTvChannelStatus(ch.id) === 'unknown'"
-                  class="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20"
+                  v-if="getTvChannelStatus(ch.id) === 'offline'"
+                  class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800/90 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-400 ring-1 ring-amber-500/20"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+                  OFFLINE
+                </span>
+
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20"
                 >
                   <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
                   LIVE
-                </span>
-
-                <!-- Checking in background -->
-                <span
-                  v-else-if="getTvChannelStatus(ch.id) === 'checking'"
-                  class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-400 ring-1 ring-amber-500/20"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping"></span>
-                  CHECKING
-                </span>
-
-                <!-- Offline -->
-                <span
-                  v-else-if="getTvChannelStatus(ch.id) === 'offline'"
-                  class="inline-flex items-center gap-1 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-zinc-400 ring-1 ring-white/10"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
-                  OFFLINE
                 </span>
 
                 <div
