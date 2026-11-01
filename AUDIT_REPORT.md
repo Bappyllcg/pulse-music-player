@@ -1,7 +1,7 @@
 # Pulse Player — Full Application Functionality & Loophole Audit Report
 
 **Date:** November 2, 2026  
-**Status:** ✅ **ALL 26 LOOPHOLES FIXED & VERIFIED (`0` TypeScript Errors, `0` Build Warnings)**  
+**Status:** ✅ **ALL 27 LOOPHOLES FIXED & VERIFIED (`0` TypeScript Errors, `0` Build Warnings)**  
 **Target Platform:** iOS Safari PWA (iPhone Standalone) & Desktop Browsers  
 **Scope:** End-to-end architecture, security, concurrency, media engine, and UX audit across all **26 source files** spanning 4 entertainment pillars (**Offline Library**, **Jamendo Online Discover**, **Live World Radio**, and **HLS Live Cinema TV**):
 - **Core Entry & Config:** [`index.html`](file:///Users/sabappy/Desktop/Pulse%20Player/index.html), [`vite.config.ts`](file:///Users/sabappy/Desktop/Pulse%20Player/vite.config.ts), [`src/main.ts`](file:///Users/sabappy/Desktop/Pulse%20Player/src/main.ts), [`src/App.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/App.vue), [`src/style.css`](file:///Users/sabappy/Desktop/Pulse%20Player/src/style.css), [`src/types/music.ts`](file:///Users/sabappy/Desktop/Pulse%20Player/src/types/music.ts)
@@ -12,14 +12,14 @@
 
 ## Executive Summary
 
-The full-project audit uncovered **26 real-world loopholes, race conditions, and edge cases** across the original core offline player (12 items) and the expanded multi-pillar streaming architecture (14 new items). **All 26 items have been resolved and verified with clean production builds (`npm run build`).**
+The full-project audit uncovered **27 real-world loopholes, race conditions, and edge cases** across the original core offline player (12 items) and the expanded multi-pillar streaming architecture (15 new items). **All 27 items have been resolved and verified with clean production builds (`npm run build`).**
 
 | Severity | Count | Key Areas Addressed | Status |
 | :--- | :---: | :--- | :---: |
 | 🔴 **Critical** | 6 | Cold-Start State Wipe Race, Audio/TV Dual-Stream & Keydown Collision, Radio CORS False-Offline Bug, iOS Lock-Screen Sleep Timer, Playback Persistence, Queue Sync | ✅ **FIXED** |
 | 🟠 **High** | 10 | Drag-and-Drop Import No-Op, Missing Radio/TV Search Bars, Out-of-Order Fetch Races, Liked Stream Persistence, Live TV iOS Fullscreen & Listener Leaks, Sheet Scroll vs. Swipe Conflict, Tap-to-Open Pause Bug, Cold-Start Seeking, Delete-While-Playing UX, Duplicate Imports | ✅ **FIXED** |
 | 🟡 **Medium** | 7 | Live Radio Seeking & Sleep Timer Guards, Play History Tracking for "Recent", Mute Volume Restoration, SVG XML Escaping & ObjectURL Cleanup, Hidden DOM Marquee Measurement, `.mp4` Video Bloat, Base64 Cover Overhead | ✅ **FIXED** |
-| 🔵 **Low / Polish** | 3 | `hls.js` Lazy Chunk Splitting (67% Main Bundle Reduction) & Offline Font Caching, Bottom Sheet Swipe-to-Close Handle, Waveform Keyboard/ARIA Accessibility | ✅ **FIXED** |
+| 🔵 **Low / Polish** | 4 | `hls.js` Lazy Chunk Splitting (67% Main Bundle Reduction) & Offline Font Caching, Bottom Sheet Swipe-to-Close Handle, Waveform Keyboard/ARIA Accessibility, Search Bar Icon Stacking-Context Occlusion | ✅ **FIXED** |
 
 ---
 
@@ -241,3 +241,10 @@ The full-project audit uncovered **26 real-world loopholes, race conditions, and
 - **Location:** [`src/components/WaveformScrubber.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/WaveformScrubber.vue#L105-L126)
 - **Problem:** The custom waveform container lacked ARIA slider semantics and keyboard arrow-key navigation.
 - **Resolution (✅ FIXED):** Added `role="slider"`, `tabindex="0"`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-valuetext`, `aria-label="Track progress"`, focus rings, and keyboard handlers (`ArrowLeft`/`ArrowRight` ±5s, `PageDown`/`PageUp` ±30s, `Home`/`End`).
+
+---
+
+### 27. Search Bar `<Search>` Icon Occluded by `absolute` Positioning & `backdrop-blur` Stacking Context
+- **Location:** [`src/components/TrackList.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/TrackList.vue#L136-L159), [`src/components/DiscoverSection.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/DiscoverSection.vue#L112-L135), [`src/components/LiveRadioSection.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/LiveRadioSection.vue#L139-L162), [`src/components/LiveTvSection.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/LiveTvSection.vue#L132-L155), & [`src/style.css`](file:///Users/sabappy/Desktop/Pulse%20Player/src/style.css#L80-L91)
+- **Problem:** In `TrackList.vue`, `<Search>` was positioned with `absolute` (`z-index: auto`) before an `<input>` carrying `backdrop-blur-md` and `bg-white`. Because `backdrop-filter` creates a new stacking context on the subsequent `<input>`, its opaque background painted directly over the `<Search>` icon, rendering it invisible. Additionally, WebKit's native `type="search"` cancel decoration could overlap the custom clear `<X>` button.
+- **Resolution (✅ FIXED):** Converted the search bars across [`TrackList.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/TrackList.vue#L136-L159), [`DiscoverSection.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/DiscoverSection.vue#L112-L135), [`LiveRadioSection.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/LiveRadioSection.vue#L139-L162), and [`LiveTvSection.vue`](file:///Users/sabappy/Desktop/Pulse%20Player/src/components/LiveTvSection.vue#L132-L155) into `focus-within:` flex containers where `<Search>`, `<input class="bg-transparent">`, and `<button>` are inline flex items (`shrink-0`) with no `absolute` positioning, and added a WebKit `input[type="search"]` cancel/decoration reset in [`src/style.css`](file:///Users/sabappy/Desktop/Pulse%20Player/src/style.css#L80-L91).

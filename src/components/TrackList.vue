@@ -134,16 +134,26 @@ function onDrop(e: DragEvent): void {
       </div>
 
       <!-- Quick Search Bar inside Library -->
-      <div class="relative mt-4 flex items-center">
-        <Search :size="15" class="pointer-events-none absolute left-3.5 text-slate-400 dark:text-zinc-400" />
-        <input :value="searchQuery" type="search" placeholder="Filter library songs or artists..."
-          class="w-full rounded-2xl py-2.5 pr-10 pl-10 text-xs font-medium backdrop-blur-md transition focus:outline-none
-                 bg-white text-slate-900 placeholder-slate-400 border border-slate-200/90 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500
-                 dark:bg-black/40 dark:text-white dark:placeholder-zinc-500 dark:border-white/15 dark:focus:ring-2 dark:focus:ring-indigo-500"
-          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)" />
-        <button v-if="searchQuery" type="button"
-          class="absolute right-3 text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white transition active:scale-90"
-          aria-label="Clear library search" @click="emit('update:searchQuery', '')">
+      <div
+        class="mt-4 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 backdrop-blur-md transition
+               bg-white border border-slate-200/90 shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500
+               dark:bg-black/40 dark:border-white/15 dark:focus-within:border-indigo-500 dark:focus-within:ring-2 dark:focus-within:ring-indigo-500"
+      >
+        <Search :size="15" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
+        <input
+          :value="searchQuery"
+          type="search"
+          placeholder="Filter library songs or artists..."
+          class="w-full min-w-0 bg-transparent text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none dark:text-white dark:placeholder-zinc-500"
+          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+        />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="shrink-0 text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white transition active:scale-90 cursor-pointer"
+          aria-label="Clear library search"
+          @click="emit('update:searchQuery', '')"
+        >
           <X :size="14" />
         </button>
       </div>
