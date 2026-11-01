@@ -11,7 +11,7 @@ import {
   Tv,
   X,
 } from 'lucide-vue-next'
-import { TV_REGIONS, type TvChannel } from '../composables/useLiveTv'
+import { TV_REGIONS, sanitizeStreamUrl, type TvChannel } from '../composables/useLiveTv'
 
 const props = defineProps<{
   channel: TvChannel | null
@@ -54,7 +54,15 @@ function loadChannelStream(channel: TvChannel): void {
   const video = videoRef.value
   if (!video) return
 
-  const streamUrl = channel.url
+  const streamUrl = sanitizeStreamUrl(channel.url)
+  if (!streamUrl) {
+    isBuffering.value = false
+    streamError.value =
+      'This stream uses unencrypted HTTP (raw IP) and cannot be loaded over HTTPS due to browser security restrictions. Tap Next Channel to continue.'
+    return
+  }
+
+  let networkRetryCount = 0
 
   if (Hls.isSupported()) {
     hlsInstance = new Hls({
@@ -75,7 +83,15 @@ function loadChannelStream(channel: TvChannel): void {
       if (data.fatal) {
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            hlsInstance?.startLoad()
+            networkRetryCount++
+            if (networkRetryCount <= 2) {
+              hlsInstance?.startLoad()
+            } else {
+              cleanUpHls()
+              streamError.value =
+                'Stream connection failed. This channel may be temporarily offline or restricted by CORS.'
+              isBuffering.value = false
+            }
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
             hlsInstance?.recoverMediaError()

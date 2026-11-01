@@ -100,9 +100,46 @@ export interface TvChannel {
   country: TvRegionId
 }
 
-const CACHE_PREFIX = 'pulse:tv_'
+const CACHE_PREFIX = 'pulse:tv_v3_'
 
-// Pre-seeded top Bangladeshi channels for instant offline-first playback
+/**
+ * Sanitizes stream URLs for HTTPS environments (e.g. GitHub Pages).
+ * - Preserves already encrypted https:// streams.
+ * - Upgrades unencrypted http:// streams on domain names to https://.
+ * - Drops unencrypted raw IP http:// streams on HTTPS origins because browsers
+ *   block them as Mixed Active Content and raw IPs do not have valid TLS certificates.
+ */
+export function sanitizeStreamUrl(url: string): string | null {
+  const trimmed = url.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  // Detect raw IP addresses like http://103.99.249.139/anandatv/index.m3u8
+  const isRawIp = /^http:\/\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(\/|$)/i.test(trimmed)
+
+  const isHttpsOrigin =
+    typeof window !== 'undefined'
+      ? window.location.protocol === 'https:'
+      : true // Default to HTTPS-safe mode
+
+  if (isHttpsOrigin) {
+    if (isRawIp) {
+      // Insecure raw IP streams cannot load over HTTPS (Mixed Content violation)
+      return null
+    }
+    // Auto-upgrade domain HTTP to HTTPS
+    if (trimmed.startsWith('http://')) {
+      return trimmed.replace(/^http:\/\//i, 'https://')
+    }
+  }
+
+  return trimmed
+}
+
+// Pre-seeded top Bangladeshi channels for instant offline-first playback (100% HTTPS verified)
 const SEED_BD_CHANNELS: TvChannel[] = [
   {
     id: 'tv-bd-banglavision',
@@ -123,18 +160,7 @@ const SEED_BD_CHANNELS: TvChannel[] = [
     logo: 'https://i.imgur.com/K1HmMRz.png',
     group: 'General',
     categoryId: 'entertainment',
-    url: 'http://tvsen5.aynascope.net/atnbangla/index.m3u8',
-    country: 'bd',
-  },
-  {
-    id: 'tv-bd-dbcnews',
-    rawName: 'DBC News (480p)',
-    cleanName: 'DBC News',
-    resolution: '480P',
-    logo: 'https://i.imgur.com/Qbt6q4z.png',
-    group: 'News',
-    categoryId: 'news',
-    url: 'http://tvn3.chowdhury-shaheb.com/dbc/index.m3u8',
+    url: 'https://tvsen5.aynascope.net/atnbangla/index.m3u8',
     country: 'bd',
   },
   {
@@ -149,25 +175,58 @@ const SEED_BD_CHANNELS: TvChannel[] = [
     country: 'bd',
   },
   {
-    id: 'tv-bd-atnmusic',
-    rawName: 'ATN Music (360p)',
-    cleanName: 'ATN Music',
-    resolution: '360P',
-    logo: 'https://www.jagobd.com/wp-content/uploads/2015/12/atnmusic.jpg',
-    group: 'Music',
-    categoryId: 'music',
-    url: 'https://app.ncare.live/c3VydmVyX8RpbEU9Mi8xNy8yMDE0GIDU6RgzQ6NTAgdEoaeFzbF92YWxIZTO0U0ezN1IzMyfvcGVMZEJCTEFWeVN3PTOmdFsaWRtaW51aiPhnPTI/atnmusic.stream/playlist.m3u8',
-    country: 'bd',
-  },
-  {
     id: 'tv-bd-maasranga',
     rawName: 'Maasranga TV (720p)',
     cleanName: 'Maasranga TV',
     resolution: '720P',
-    logo: 'https://i.imgur.com/b2t7Rj2.png',
+    logo: 'https://i.imgur.com/uVZJMed.png',
     group: 'Entertainment',
     categoryId: 'entertainment',
-    url: 'http://tvsen5.aynascope.net/maasrangatv/index.m3u8',
+    url: 'https://tvsen5.aynascope.net/maasrangatv/index.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-rtv',
+    rawName: 'RTV (Bangladesh) (720p)',
+    cleanName: 'RTV',
+    resolution: '720P',
+    logo: 'https://i.imgur.com/yu8ugqt.png',
+    group: 'General',
+    categoryId: 'entertainment',
+    url: 'https://tvsen5.aynascope.net/RtvHD/index.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-ntv',
+    rawName: 'NTV (Bangladesh) (720p)',
+    cleanName: 'NTV',
+    resolution: '720P',
+    logo: 'https://i.imgur.com/l75bDTx.png',
+    group: 'General',
+    categoryId: 'entertainment',
+    url: 'https://tvsen5.aynaott.com/xV4jEKf3D9zc/index.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-ekushey',
+    rawName: 'Ekushey TV (480p)',
+    cleanName: 'Ekushey TV',
+    resolution: '480P',
+    logo: 'https://i.imgur.com/lRpkGHj.png',
+    group: 'News',
+    categoryId: 'news',
+    url: 'https://ekusheyserver.com/etvlivesn.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-nexus',
+    rawName: 'Nexus TV (576p)',
+    cleanName: 'Nexus TV',
+    resolution: '576P',
+    logo: 'https://i.imgur.com/XcJZKg4.png',
+    group: 'General',
+    categoryId: 'entertainment',
+    url: 'https://tvsen6.aynaott.com/Epm7WrFa/index.m3u8',
     country: 'bd',
   },
   {
@@ -182,6 +241,39 @@ const SEED_BD_CHANNELS: TvChannel[] = [
     country: 'bd',
   },
   {
+    id: 'tv-bd-starjalsha',
+    rawName: 'Star Jalsha HD (720p)',
+    cleanName: 'Star Jalsha HD',
+    resolution: '720P',
+    logo: 'https://i.imgur.com/IlufzR5.png',
+    group: 'Entertainment',
+    categoryId: 'entertainment',
+    url: 'https://da86m1sqpm3o0.cloudfront.net/28072023/smil:starjalsha.smil/chunklist_b1928000.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-zeebangla',
+    rawName: 'Zee Bangla HD (720p)',
+    cleanName: 'Zee Bangla HD',
+    resolution: '720P',
+    logo: 'https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_ZEE_BANGLA/images/LOGO_HD/LOGO_HD_image.png',
+    group: 'Entertainment',
+    categoryId: 'entertainment',
+    url: 'https://raw.githubusercontent.com/amazeyourself/adaptive-streams/refs/heads/main/streams/in/YuppTV/ZeeBanglaHD.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-peacetv',
+    rawName: 'Peace TV Bangla (1080p)',
+    cleanName: 'Peace TV Bangla',
+    resolution: '1080P',
+    logo: 'https://i.imgur.com/1ztVXUi.png',
+    group: 'Religious',
+    categoryId: 'religious',
+    url: 'https://dzkyvlfyge.erbvr.com/PeaceTvBangla/index.m3u8',
+    country: 'bd',
+  },
+  {
     id: 'tv-bd-channels',
     rawName: 'Channel S (Bangladesh)',
     cleanName: 'Channel S',
@@ -193,25 +285,58 @@ const SEED_BD_CHANNELS: TvChannel[] = [
     country: 'bd',
   },
   {
-    id: 'tv-bd-ekhon',
-    rawName: 'Ekhon TV (1080p)',
-    cleanName: 'Ekhon TV',
-    resolution: '1080P',
-    logo: 'https://i.imgur.com/tRrDh6z.png',
-    group: 'Business',
-    categoryId: 'news',
-    url: 'https://tplay.live/out/bangladesh/ekhontv.index.m3u8',
+    id: 'tv-bd-mytv',
+    rawName: 'My TV (Bangladesh)',
+    cleanName: 'My TV',
+    resolution: '720P',
+    logo: 'https://i.imgur.com/475qK5T.png',
+    group: 'General',
+    categoryId: 'entertainment',
+    url: 'https://app.ncare.live/c3VydmVyX8RpbEU9Mi8xNy8yMDE0GIDU6RgzQ6NTAgdEoaeFzbF92YWxIZTO0U0ezN1IzMyfvcGVMZEJCTEFWeVN3PTOmdFsaWRtaW51aiPhnPTI2/mytv-up-off.stream/live-orgin/mytv-up-off.stream/playlist.m3u8',
     country: 'bd',
   },
   {
-    id: 'tv-bd-madani',
-    rawName: 'Madani Channel Bangla (1080p)',
-    cleanName: 'Madani Channel Bangla',
-    resolution: '1080P',
-    logo: 'https://i.imgur.com/V2zBv5R.png',
+    id: 'tv-bd-deshitv',
+    rawName: 'Deshi TV (720p)',
+    cleanName: 'Deshi TV',
+    resolution: '720P',
+    logo: 'https://i.imgur.com/PzqzgMm.png',
+    group: 'General',
+    categoryId: 'entertainment',
+    url: 'https://deshitv.deshitv24.net/live/myStream/playlist.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-azantv',
+    rawName: 'Azan TV',
+    cleanName: 'Azan TV',
+    resolution: '720P',
+    logo: 'https://i.imgur.com/JlqS6I4.jpeg',
     group: 'Religious',
     categoryId: 'religious',
-    url: 'https://streaming.madanichannel.tv/static/stream/madanibangla/playlist.m3u8',
+    url: 'https://dbcanada.sonarbanglatv.com/azantv/atv/index.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-rajdhanitv',
+    rawName: 'Rajdhani TV SD (1080p)',
+    cleanName: 'Rajdhani TV',
+    resolution: '1080P',
+    logo: 'https://i.imgur.com/MBm2gPz.jpeg',
+    group: 'General',
+    categoryId: 'entertainment',
+    url: 'https://stream.shariarsuvo.com/hls5/rajdhanicable.m3u8',
+    country: 'bd',
+  },
+  {
+    id: 'tv-bd-rupashibangla',
+    rawName: 'Rupashi Bangla TV (720p)',
+    cleanName: 'Rupashi Bangla TV',
+    resolution: '720P',
+    logo: 'https://jiotvimages.cdn.jio.com/dare_images/images/Rupashi_Bangla.png',
+    group: 'Entertainment',
+    categoryId: 'entertainment',
+    url: 'https://app24.jagobd.com.bd/c3VydmVyX8RpbEU9Mi8xNy8yMFDEEHGcfRgzQ6NTAgdEoaeFzbF92YWxIZTO0U0ezN1IzMyfvcEdsEfeDeKiNkVN3PTOmdFseWRtaW51aiPhnPTI2/ruposhibangla.stream/playlist.m3u8',
     country: 'bd',
   },
 ]
@@ -273,30 +398,33 @@ function parseM3u(content: string, region: TvRegionId): TvChannel[] {
     if (line.startsWith('#EXTINF:')) {
       currentExtInf = line
     } else if (!line.startsWith('#') && currentExtInf) {
-      const url = line
-      const logoMatch = currentExtInf.match(/tvg-logo="([^"]*)"/)
-      const logo = logoMatch ? logoMatch[1] : ''
+      // Filter out raw IP unencrypted streams on HTTPS and auto-upgrade domains to https://
+      const sanitizedUrl = sanitizeStreamUrl(line)
+      if (sanitizedUrl) {
+        const logoMatch = currentExtInf.match(/tvg-logo="([^"]*)"/)
+        const logo = logoMatch ? logoMatch[1] : ''
 
-      const groupMatch = currentExtInf.match(/group-title="([^"]*)"/)
-      const group = groupMatch ? groupMatch[1] : 'General'
+        const groupMatch = currentExtInf.match(/group-title="([^"]*)"/)
+        const group = groupMatch ? groupMatch[1] : 'General'
 
-      const commaIdx = currentExtInf.lastIndexOf(',')
-      const rawName = commaIdx !== -1 ? currentExtInf.slice(commaIdx + 1).trim() : 'Live TV'
+        const commaIdx = currentExtInf.lastIndexOf(',')
+        const rawName = commaIdx !== -1 ? currentExtInf.slice(commaIdx + 1).trim() : 'Live TV'
 
-      const { cleanName, resolution } = parseChannelName(rawName)
-      const categoryId = mapGroupToCategory(group)
+        const { cleanName, resolution } = parseChannelName(rawName)
+        const categoryId = mapGroupToCategory(group)
 
-      channels.push({
-        id: `tv-${region}-${channels.length}-${cleanName.replace(/\W+/g, '-').toLowerCase()}`,
-        rawName,
-        cleanName,
-        resolution,
-        logo,
-        group,
-        categoryId,
-        url,
-        country: region,
-      })
+        channels.push({
+          id: `tv-${region}-${channels.length}-${cleanName.replace(/\W+/g, '-').toLowerCase()}`,
+          rawName,
+          cleanName,
+          resolution,
+          logo,
+          group,
+          categoryId,
+          url: sanitizedUrl,
+          country: region,
+        })
+      }
 
       currentExtInf = null
     }
@@ -359,10 +487,20 @@ export function useLiveTv() {
         if (stored) {
           const parsed = JSON.parse(stored) as TvChannel[]
           if (Array.isArray(parsed) && parsed.length > 0) {
-            channelCache.set(regionId, parsed)
-            channels.value = parsed
-            tvError.value = null
-            return parsed
+            // Sanitize any previously cached channels
+            const sanitizedCached = parsed
+              .map((ch) => {
+                const cleanUrl = sanitizeStreamUrl(ch.url)
+                return cleanUrl ? { ...ch, url: cleanUrl } : null
+              })
+              .filter((ch): ch is TvChannel => ch !== null)
+
+            if (sanitizedCached.length > 0) {
+              channelCache.set(regionId, sanitizedCached)
+              channels.value = sanitizedCached
+              tvError.value = null
+              return sanitizedCached
+            }
           }
         }
       } catch {}
