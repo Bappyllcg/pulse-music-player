@@ -589,7 +589,7 @@ onBeforeUnmount(() => {
             >
               {{ channel.resolution }}
             </span>
-            <!-- Live / Offline Badge & Signal Strength -->
+            <!-- Signal Strength Pill -->
             <span
               v-if="getChannelStatus(channel.id) === 'offline'"
               class="inline-flex items-center gap-1 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 ring-1 ring-amber-500/20"
@@ -597,26 +597,19 @@ onBeforeUnmount(() => {
               <SignalZero :size="10" class="text-amber-500/80" />
               OFFLINE
             </span>
-            <div v-else class="flex items-center gap-1">
-              <span
-                class="inline-flex items-center gap-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold text-rose-300 ring-1 ring-rose-500/40"
-              >
-                <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                LIVE
+            <span
+              v-else
+              class="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300 ring-1 ring-white/10"
+              :title="getChannelLatency(channel.id) ? `Ping: ${getChannelLatency(channel.id)}ms (${getChannelNetworkStrength(channel.id)})` : 'Network Strength: Good'"
+            >
+              <SignalHigh v-if="getChannelNetworkStrength(channel.id) === 'excellent'" :size="11" class="text-emerald-400" />
+              <SignalMedium v-else-if="getChannelNetworkStrength(channel.id) === 'good'" :size="11" class="text-teal-400" />
+              <SignalLow v-else-if="getChannelNetworkStrength(channel.id) === 'fair' || getChannelNetworkStrength(channel.id) === 'poor'" :size="11" class="text-amber-400" />
+              <SignalZero v-else :size="11" class="text-zinc-500" />
+              <span v-if="getChannelLatency(channel.id)" class="font-mono text-[9px] text-zinc-300">
+                {{ getChannelLatency(channel.id) }}ms
               </span>
-              <span
-                class="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300 ring-1 ring-white/10"
-                :title="getChannelLatency(channel.id) ? `Ping: ${getChannelLatency(channel.id)}ms (${getChannelNetworkStrength(channel.id)})` : 'Network Strength: Good'"
-              >
-                <SignalHigh v-if="getChannelNetworkStrength(channel.id) === 'excellent'" :size="11" class="text-emerald-400" />
-                <SignalMedium v-else-if="getChannelNetworkStrength(channel.id) === 'good'" :size="11" class="text-teal-400" />
-                <SignalLow v-else-if="getChannelNetworkStrength(channel.id) === 'fair' || getChannelNetworkStrength(channel.id) === 'poor'" :size="11" class="text-amber-400" />
-                <SignalZero v-else :size="11" class="text-zinc-500" />
-                <span v-if="getChannelLatency(channel.id)" class="font-mono text-[9px] text-zinc-300">
-                  {{ getChannelLatency(channel.id) }}ms
-                </span>
-              </span>
-            </div>
+            </span>
           </div>
           <p class="truncate text-xs text-zinc-400">
             {{ countryInfo }}

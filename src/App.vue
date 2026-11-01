@@ -986,30 +986,8 @@ onBeforeUnmount(() => {
                   </span>
                 </div>
 
-                <!-- Status Badge -->
-                <span
-                  v-if="getTvChannelStatus(ch.id) === 'offline'"
-                  class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800/90 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-400 ring-1 ring-amber-500/20"
-                >
-                  <SignalZero :size="11" class="text-amber-500/70" />
-                  <span>OFFLINE</span>
-                </span>
-
-                <span
-                  v-else
-                  class="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-rose-400 ring-1 ring-rose-500/20"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                  LIVE
-                </span>
-
                 <div
-                  class="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition"
-                  :class="
-                    getTvChannelStatus(ch.id) === 'offline'
-                      ? 'bg-zinc-800/60 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-white'
-                      : 'bg-white/[0.08] text-white group-hover:bg-rose-600 group-hover:text-white'
-                  "
+                  class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white"
                 >
                   <Play :size="14" fill="currentColor" class="translate-x-0.5" />
                 </div>

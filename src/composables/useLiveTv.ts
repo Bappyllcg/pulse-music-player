@@ -662,6 +662,9 @@ export function useLiveTv() {
       )
     }
 
+    // 3. Hide Offline Channels
+    list = list.filter((ch) => getChannelStatus(ch.id) !== 'offline')
+
     return list
   })
 
