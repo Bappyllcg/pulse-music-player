@@ -24,7 +24,6 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-  Sparkles,
   X,
 } from 'lucide-vue-next'
 import MarqueeText from './components/MarqueeText.vue'
@@ -522,7 +521,7 @@ onBeforeUnmount(() => {
         <div class="mb-5 flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
             :class="
               selectedFilter === 'all'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
@@ -534,7 +533,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
             :class="
               selectedFilter === 'liked'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
@@ -543,11 +542,11 @@ onBeforeUnmount(() => {
             @click="selectedFilter = 'liked'"
           >
             <Heart :size="13" :fill="selectedFilter === 'liked' ? 'currentColor' : 'none'" />
-            <span>Liked Songs ({{ likedIds.size }})</span>
+            <span>Liked</span>
           </button>
           <button
             type="button"
-            class="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
             :class="
               selectedFilter === 'recent'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
@@ -559,7 +558,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition active:scale-95"
             :class="
               selectedFilter === 'online'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
@@ -575,13 +574,13 @@ onBeforeUnmount(() => {
         <!-- Online Music Genre Filtration Sub-Bar -->
         <div
           v-if="selectedFilter === 'online'"
-          class="mb-4 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+          class="mb-5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
         >
           <button
             v-for="genre in onlineGenres"
             :key="genre.id"
             type="button"
-            class="flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95"
             :class="
               activeGenreId === genre.id && !searchQuery.trim()
                 ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-white/20'
@@ -593,59 +592,12 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- Featured / Active Hero Banner -->
-        <div
-          v-if="currentTrack"
-          class="relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950/70 via-zinc-900/80 to-zinc-900/90 p-5 ring-1 ring-indigo-500/20 shadow-xl"
-        >
-          <div class="relative z-10 flex items-center justify-between gap-4">
-            <div class="min-w-0 flex-1">
-              <span class="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-indigo-400 uppercase">
-                <Sparkles :size="12" />
-                Now Playing
-              </span>
-              <h2 class="mt-1 truncate text-base font-bold text-white">
-                {{ currentTrack.title }}
-              </h2>
-              <p class="truncate text-xs text-zinc-400">{{ currentTrack.artist }}</p>
-
-              <button
-                type="button"
-                class="mt-3.5 inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-zinc-950 shadow-md transition active:scale-95 hover:bg-zinc-200"
-                @click="activeTab = 'player'"
-              >
-                <Maximize2 :size="13" />
-                <span>Open Player</span>
-              </button>
-            </div>
-
-            <!-- Artwork Thumbnail -->
-            <div
-              class="relative h-20 w-20 shrink-0 cursor-pointer overflow-hidden rounded-2xl bg-zinc-800 ring-1 ring-white/10 shadow-lg"
-              @click="activeTab = 'player'"
-            >
-              <img :src="currentTrack.coverUrl" alt="" class="h-full w-full object-cover" />
-              <div
-                v-if="isPlaying"
-                class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]"
-              >
-                <span
-                  v-for="n in 3"
-                  :key="n"
-                  class="animate-eq mx-[1px] h-4 w-1 rounded-full bg-indigo-400"
-                  :style="{ animationDelay: `${n * 0.15}s` }"
-                ></span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Track List -->
         <section aria-label="Track list">
           <div class="mb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-bold text-white">
-                {{ selectedFilter === 'online' ? activeGenreLabel : selectedFilter === 'liked' ? 'Liked Songs' : selectedFilter === 'recent' ? 'Recent Tracks' : 'Your library' }}
+                {{ selectedFilter === 'online' ? activeGenreLabel : selectedFilter === 'liked' ? 'Liked' : selectedFilter === 'recent' ? 'Recent Tracks' : 'Your library' }}
               </h2>
               <button
                 v-if="selectedFilter === 'online'"
