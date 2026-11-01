@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Check, ChevronDown } from 'lucide-vue-next'
+import { Check, ChevronDown, Moon } from 'lucide-vue-next'
 import { SLEEP_MINUTE_OPTIONS } from '../composables/useSleepTimer'
 
 defineProps<{
   open: boolean
   activeSelection: number | 'track' | null
   isActive: boolean
+  remainingFormatted?: string
 }>()
 
 const emit = defineEmits<{
@@ -17,10 +18,7 @@ const emit = defineEmits<{
   (e: 'turnOff'): void
 }>()
 
-/* ------------------------------------------------------------------ */
-/* Swipe-to-Dismiss Gesture                                           */
-/* ------------------------------------------------------------------ */
-
+/* Swipe-to-Dismiss Gesture */
 const sleepDragOffset = ref(0)
 const isDraggingSleep = ref(false)
 let touchStartYSleep = 0
@@ -51,76 +49,111 @@ function onSleepTouchEnd(): void {
   <div>
     <!-- Backdrop Overlay -->
     <div
-      class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
+      class="fixed inset-0 z-40 bg-black/75 backdrop-blur-md transition-opacity duration-300"
       :class="open ? 'opacity-100' : 'pointer-events-none opacity-0'"
       aria-hidden="true"
       @click="emit('close'); emit('update:open', false)"
     ></div>
 
-    <!-- Sleep Timer Drawer -->
+    <!-- Sleep Timer Drawer Sheet -->
     <aside
-      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] bg-zinc-900 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl ring-1 ring-white/15 transition-transform duration-300 ease-out"
+      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] border pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out
+             bg-white border-slate-200 text-slate-900
+             dark:bg-zinc-900/95 dark:border-white/15 dark:text-zinc-100"
       :class="open ? 'translate-y-0' : 'translate-y-full'"
       :style="sleepDragOffset > 0 ? { transform: `translateY(${sleepDragOffset}px)`, transition: 'none' } : {}"
       :inert="open ? undefined : true"
       role="dialog"
-      aria-label="Sleep timer"
+      aria-modal="true"
+      aria-labelledby="sleep-timer-title"
+      @touchstart="onSleepTouchStart"
+      @touchmove="onSleepTouchMove"
+      @touchend="onSleepTouchEnd"
     >
-      <div
-        class="flex items-center justify-between px-6 pt-4 pb-2 cursor-grab active:cursor-grabbing"
-        @touchstart="onSleepTouchStart"
-        @touchmove="onSleepTouchMove"
-        @touchend="onSleepTouchEnd"
-        @touchcancel="onSleepTouchEnd"
-      >
-        <div>
-          <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-zinc-700"></div>
-          <h2 class="text-xl font-bold text-white">Sleep Timer</h2>
+      <!-- Drag Handle -->
+      <div class="flex justify-center pt-3 pb-1 cursor-grab">
+        <div class="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-zinc-700/80 transition hover:bg-slate-400 dark:hover:bg-zinc-500"></div>
+      </div>
+
+      <!-- Header with Icon & Meta -->
+      <div class="flex items-center justify-between border-b border-slate-200/80 dark:border-white/[0.08] px-6 py-3">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-600/20 dark:text-indigo-400 dark:border-indigo-500/30">
+            <Moon :size="18" />
+          </div>
+          <div>
+            <h2 id="sleep-timer-title" class="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+              Sleep Timer
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-zinc-400">
+              <span v-if="isActive && remainingFormatted" class="text-indigo-600 dark:text-indigo-400 font-semibold">
+                Stops in {{ remainingFormatted }}
+              </span>
+              <span v-else>
+                Automatically pause playback
+              </span>
+            </p>
+          </div>
         </div>
+
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
+          class="flex h-8 w-8 items-center justify-center rounded-full border transition active:scale-90 cursor-pointer
+                 bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:text-slate-800
+                 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10 dark:hover:bg-zinc-700 dark:hover:text-white"
           aria-label="Close sleep timer"
           @click="emit('close'); emit('update:open', false)"
         >
-          <ChevronDown :size="20" aria-hidden="true" />
+          <ChevronDown :size="18" />
         </button>
       </div>
 
-      <ul class="px-4 pt-2 space-y-1" aria-label="Sleep timer options">
+      <!-- Preset Options List -->
+      <ul class="px-5 pt-3 space-y-1.5" aria-label="Sleep timer options">
         <li v-for="minutes in SLEEP_MINUTE_OPTIONS" :key="minutes">
           <button
             type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-zinc-800"
-            :class="activeSelection === minutes ? 'bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/40' : 'text-zinc-200'"
+            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:scale-[0.99] cursor-pointer border"
+            :class="
+              activeSelection === minutes
+                ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-md ring-2 ring-indigo-500/20 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-500/50 dark:shadow-indigo-950/30 font-bold'
+                : 'bg-slate-100/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:bg-zinc-800/30 dark:text-zinc-200 dark:border-white/[0.04] dark:hover:bg-zinc-800/60'
+            "
             @click="emit('chooseMinutes', minutes)"
           >
             <span>{{ minutes }} minutes</span>
-            <Check v-if="activeSelection === minutes" :size="18" class="text-indigo-400" aria-hidden="true" />
+            <Check v-if="activeSelection === minutes" :size="18" class="text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
           </button>
         </li>
+
         <li>
           <button
             type="button"
-            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:bg-zinc-800"
-            :class="activeSelection === 'track' ? 'bg-indigo-950/60 text-indigo-300 ring-1 ring-indigo-500/40' : 'text-zinc-200'"
+            class="flex min-h-12 w-full items-center justify-between rounded-2xl px-4 text-left text-sm font-semibold transition active:scale-[0.99] cursor-pointer border"
+            :class="
+              activeSelection === 'track'
+                ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-md ring-2 ring-indigo-500/20 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-500/50 dark:shadow-indigo-950/30 font-bold'
+                : 'bg-slate-100/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:bg-zinc-800/30 dark:text-zinc-200 dark:border-white/[0.04] dark:hover:bg-zinc-800/60'
+            "
             @click="emit('chooseEndOfTrack')"
           >
             <span>End of current track</span>
-            <Check v-if="activeSelection === 'track'" :size="18" class="text-indigo-400" aria-hidden="true" />
+            <Check v-if="activeSelection === 'track'" :size="18" class="text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
           </button>
         </li>
-        <li v-if="isActive">
+
+        <li v-if="isActive" class="pt-2">
           <button
             type="button"
-            class="mt-2 flex min-h-12 w-full items-center justify-center rounded-2xl bg-red-950/40 px-4 text-sm font-semibold text-red-400 ring-1 ring-red-500/30 transition active:bg-red-900/50"
+            class="flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-sm font-bold border shadow-md transition active:scale-95 cursor-pointer
+                   bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100
+                   dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-500/30 dark:hover:bg-rose-900/50"
             @click="emit('turnOff')"
           >
-            Turn off timer
+            Turn Off Timer
           </button>
         </li>
       </ul>
     </aside>
   </div>
 </template>
-
