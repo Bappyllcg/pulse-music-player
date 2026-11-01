@@ -5,10 +5,14 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Globe,
   Heart,
+  Import,
+  Info,
   ListMusic,
   Maximize2,
+  Menu,
   MinusCircle,
   Moon,
   Music,
@@ -22,6 +26,7 @@ import {
   RotateCcw,
   RotateCw,
   Search,
+  ShieldCheck,
   Shuffle,
   SignalHigh,
   SignalLow,
@@ -29,6 +34,7 @@ import {
   SignalZero,
   SkipBack,
   SkipForward,
+  Sparkles,
   Tv,
   X,
 } from 'lucide-vue-next'
@@ -40,7 +46,7 @@ import { useAudioStorage } from './composables/useAudioStorage'
 import { useLiveTv, type TvCategoryId, type TvRegionId } from './composables/useLiveTv'
 import { useOnlineMusic } from './composables/useOnlineMusic'
 import { usePlayer } from './composables/usePlayer'
-import { useRadio } from './composables/useRadio'
+import { useRadio, type RadioCategoryId, type RadioRegionId } from './composables/useRadio'
 import { SLEEP_MINUTE_OPTIONS, useSleepTimer } from './composables/useSleepTimer'
 
 /* ------------------------------------------------------------------ */
@@ -66,14 +72,23 @@ const {
   fetchOnlineTracks,
 } = onlineMusic
 const {
-  radioStations,
+  stations: radioStations,
+  filteredStations: filteredRadioStations,
   isLoadingRadio,
   radioError,
-  activeRadioCategoryId,
+  activeRegion: activeRadioRegion,
+  activeCategory: activeRadioCategory,
+  currentRadioSearch,
+  regions: radioRegions,
   categories: radioCategories,
-  selectRadioCategory,
+  selectRegion: selectRadioRegion,
+  selectCategory: selectRadioCategory,
   searchRadio,
   fetchRadioStations,
+  getStationStatus: getRadioStationStatus,
+  getStationLatency: getRadioStationLatency,
+  getStationNetworkStrength: getRadioNetworkStrength,
+  runBackgroundHealthCheck: runRadioHealthCheck,
 } = radio
 const {
   channels: tvChannels,
@@ -126,6 +141,7 @@ watch(searchQuery, (newQuery) => {
       void searchOnline(newQuery)
     }, 350)
   } else if (selectedFilter.value === 'radio') {
+    currentRadioSearch.value = newQuery
     window.clearTimeout(searchDebounceTimer)
     searchDebounceTimer = window.setTimeout(() => {
       void searchRadio(newQuery)
@@ -140,9 +156,13 @@ async function onSelectGenre(genreId: string): Promise<void> {
   await selectGenre(genreId)
 }
 
-async function onSelectRadioCategory(categoryId: string): Promise<void> {
+async function onSelectRadioRegion(regionId: RadioRegionId): Promise<void> {
   searchQuery.value = ''
-  await selectRadioCategory(categoryId)
+  await selectRadioRegion(regionId)
+}
+
+function onSelectRadioCategory(categoryId: RadioCategoryId): void {
+  selectRadioCategory(categoryId)
 }
 
 async function selectOnlineFilter(): Promise<void> {
@@ -156,12 +176,18 @@ async function selectOnlineFilter(): Promise<void> {
 
 async function selectRadioFilter(): Promise<void> {
   selectedFilter.value = 'radio'
-  if (searchQuery.value.trim()) {
-    await searchRadio(searchQuery.value.trim())
-  } else if (radioStations.value.length === 0) {
-    await selectRadioCategory(activeRadioCategoryId.value)
+  if (radioStations.value.length === 0) {
+    await selectRadioRegion('bd')
+  } else {
+    void runRadioHealthCheck(filteredRadioStations.value)
   }
 }
+
+watch([activeRadioRegion, activeRadioCategory], () => {
+  if (selectedFilter.value === 'radio' && filteredRadioStations.value.length > 0) {
+    void runRadioHealthCheck(filteredRadioStations.value)
+  }
+})
 
 async function selectTvFilter(): Promise<void> {
   selectedFilter.value = 'tv'
@@ -206,8 +232,13 @@ const activeRadioLabel = computed(() => {
   if (searchQuery.value.trim()) {
     return `Radio: “${searchQuery.value.trim()}”`
   }
-  const found = radioCategories.find((c) => c.id === activeRadioCategoryId.value)
-  return found ? `${found.label} Radio` : 'Live Radio'
+  const reg = radioRegions.find((r) => r.id === activeRadioRegion.value)
+  const cat = radioCategories.find((c) => c.id === activeRadioCategory.value)
+  const prefix = reg ? `${reg.flag} ${reg.label}` : 'Live Radio'
+  if (activeRadioCategory.value === 'all') {
+    return `${prefix} Radio`
+  }
+  return `${prefix} • ${cat?.label ?? ''}`
 })
 
 const activeTvLabel = computed(() => {
@@ -249,10 +280,59 @@ function toggleLike(id: string): void {
 }
 
 const fileInput = ref<HTMLInputElement | null>(null)
+const menuOpen = ref(false)
 const playlistOpen = ref(false)
 const sleepOpen = ref(false)
 const notice = ref<string | null>(null)
 let noticeTimer: number | undefined
+
+/* ------------------------------------------------------------------ */
+/* App Update Checker (PWA & Service Worker)                          */
+/* ------------------------------------------------------------------ */
+
+const isCheckingUpdate = ref(false)
+const updateStatus = ref<'latest' | 'update_available' | 'error' | null>(null)
+const lastUpdateChecked = ref<string | null>(null)
+
+async function checkForUpdate(): Promise<void> {
+  if (isCheckingUpdate.value) return
+  isCheckingUpdate.value = true
+  updateStatus.value = null
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration()
+      if (registration) {
+        await Promise.all([
+          registration.update(),
+          new Promise((resolve) => setTimeout(resolve, 800)),
+        ])
+        if (registration.waiting || registration.installing) {
+          updateStatus.value = 'update_available'
+        } else {
+          updateStatus.value = 'latest'
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 800))
+        updateStatus.value = 'latest'
+      }
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      updateStatus.value = 'latest'
+    }
+    const now = new Date()
+    lastUpdateChecked.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch (err) {
+    console.error('[Pulse] Update check failed:', err)
+    updateStatus.value = 'error'
+  } finally {
+    isCheckingUpdate.value = false
+  }
+}
+
+function applyUpdate(): void {
+  window.location.reload()
+}
 
 /* ------------------------------------------------------------------ */
 /* Filtered Tracks & Active Queue Synchronization                     */
@@ -263,7 +343,7 @@ const filteredTracks = computed(() => {
     return onlineTracks.value
   }
   if (selectedFilter.value === 'radio') {
-    return radioStations.value
+    return filteredRadioStations.value
   }
 
   let list = tracks.value
@@ -430,12 +510,17 @@ function turnOffSleep(): void {
 watch(sleep.firedCount, () => showNotice('Sleep timer ended. Playback paused.'))
 
 function closeSheets(): void {
+  menuOpen.value = false
   playlistOpen.value = false
   sleepOpen.value = false
 }
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
+    if (menuOpen.value) {
+      menuOpen.value = false
+      return
+    }
     if (trackToRemove.value) {
       cancelRemoveTrack()
       return
@@ -449,6 +534,7 @@ watch(
   () => tracks.value.length,
   (count) => {
     if (count === 0) {
+      menuOpen.value = false
       playlistOpen.value = false
       sleepOpen.value = false
       trackToRemove.value = null
@@ -458,8 +544,31 @@ watch(
 )
 
 /* ------------------------------------------------------------------ */
-/* Swipe-to-Dismiss Gestures for Bottom Sheets                        */
+/* Swipe-to-Dismiss Gestures for Drawers & Bottom Sheets              */
 /* ------------------------------------------------------------------ */
+
+const menuDragOffset = ref(0)
+const isDraggingMenu = ref(false)
+let touchStartXMenu = 0
+
+function onMenuTouchStart(e: TouchEvent): void {
+  touchStartXMenu = e.touches[0].clientX
+  isDraggingMenu.value = true
+}
+function onMenuTouchMove(e: TouchEvent): void {
+  if (!isDraggingMenu.value) return
+  const deltaX = e.touches[0].clientX - touchStartXMenu
+  // Only allow dragging to the right (closing direction)
+  menuDragOffset.value = deltaX > 0 ? deltaX : 0
+}
+function onMenuTouchEnd(): void {
+  if (!isDraggingMenu.value) return
+  isDraggingMenu.value = false
+  if (menuDragOffset.value > 70) {
+    menuOpen.value = false
+  }
+  menuDragOffset.value = 0
+}
 
 const playlistDragOffset = ref(0)
 const isDraggingPlaylist = ref(false)
@@ -592,20 +701,34 @@ onBeforeUnmount(() => {
               type="button"
               class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
               aria-label="Toggle search"
+              title="Search"
               @click="showSearch = !showSearch"
             >
               <Search :size="18" />
             </button>
 
-            <!-- Import button -->
+            <!-- Import button (Icon-only with Import icon) -->
             <button
               type="button"
-              class="flex items-center gap-1.5 rounded-full bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500 disabled:opacity-50"
+              class="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-90 hover:bg-indigo-500 disabled:opacity-50"
               :disabled="isImporting"
+              aria-label="Import audio files"
+              title="Import audio files"
               @click="openFilePicker"
             >
-              <Plus :size="15" />
-              <span>{{ isImporting ? 'Adding...' : 'Import' }}</span>
+              <RefreshCw v-if="isImporting" :size="17" class="animate-spin" />
+              <Import v-else :size="18" />
+            </button>
+
+            <!-- Hamburger menu button -->
+            <button
+              type="button"
+              class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 backdrop-blur-md transition active:scale-90 hover:text-white"
+              aria-label="Open menu"
+              title="Menu"
+              @click="menuOpen = true"
+            >
+              <Menu :size="19" />
             </button>
           </div>
         </header>
@@ -741,20 +864,42 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <!-- Live Radio Country / Region Priority Bar (BD 1st, IN 2nd, PK 3rd, Global 4th) -->
+        <div
+          v-if="selectedFilter === 'radio'"
+          class="mb-2.5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+        >
+          <button
+            v-for="reg in radioRegions"
+            :key="reg.id"
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95"
+            :class="
+              activeRadioRegion === reg.id
+                ? 'bg-gradient-to-r from-rose-500 to-indigo-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
+            "
+            @click="onSelectRadioRegion(reg.id)"
+          >
+            <span>{{ reg.flag }}</span>
+            <span>{{ reg.label }}</span>
+          </button>
+        </div>
+
         <!-- Live Radio Category Filtration Sub-Bar -->
         <div
           v-if="selectedFilter === 'radio'"
-          class="mb-5 -mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+          class="mb-5 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
         >
           <button
             v-for="cat in radioCategories"
             :key="cat.id"
             type="button"
-            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95"
+            class="flex shrink-0 whitespace-nowrap items-center rounded-full px-3 py-1 text-[11px] font-semibold transition active:scale-95"
             :class="
-              activeRadioCategoryId === cat.id && !searchQuery.trim()
-                ? 'bg-gradient-to-r from-rose-500 to-rose-600 text-white shadow-md shadow-rose-600/30 ring-1 ring-white/20'
-                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800'
+              activeRadioCategory === cat.id
+                ? 'bg-zinc-100 text-zinc-950 font-bold shadow-md ring-1 ring-white'
+                : 'bg-zinc-900/80 text-zinc-400 ring-1 ring-white/5 hover:text-white hover:bg-zinc-800'
             "
             @click="onSelectRadioCategory(cat.id)"
           >
@@ -849,10 +994,8 @@ onBeforeUnmount(() => {
                 ></span>
                 <span>{{ selectedFilter === 'tv' ? 'Updating...' : selectedFilter === 'radio' ? 'Tuning...' : 'Searching...' }}</span>
               </span>
-              <span v-if="selectedFilter !== 'tv'" class="text-xs font-medium text-zinc-500">
-                {{
-                  `${filteredTracks.length} ${filteredTracks.length === 1 ? (selectedFilter === 'radio' ? 'station' : selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'radio' ? 'stations' : selectedFilter === 'online' ? 'tracks' : 'songs')}`
-                }}
+              <span v-if="selectedFilter !== 'tv' && selectedFilter !== 'radio'" class="text-xs font-medium text-zinc-500">
+                {{ filteredTracks.length }} {{ filteredTracks.length === 1 ? (selectedFilter === 'online' ? 'track' : 'song') : (selectedFilter === 'online' ? 'tracks' : 'songs') }}
               </span>
             </div>
           </div>
@@ -1015,40 +1158,223 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- Loading state for online / radio -->
+          <!-- Loading state for Live Radio -->
           <div
-            v-else-if="((isLoadingOnline && selectedFilter === 'online') || (isLoadingRadio && selectedFilter === 'radio')) && filteredTracks.length === 0"
+            v-if="selectedFilter === 'radio' && isLoadingRadio && filteredRadioStations.length === 0"
             class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
           >
+            <div class="h-8 w-8 animate-spin rounded-full border-2 border-rose-500 border-t-transparent"></div>
+            <p class="text-sm font-medium text-zinc-300">Tuning into live radio playlist...</p>
+            <p class="text-xs text-zinc-500">Connecting to Radio Browser directory</p>
+          </div>
+
+          <!-- Error state for Live Radio -->
+          <div
+            v-else-if="selectedFilter === 'radio' && radioError && filteredRadioStations.length === 0"
+            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
+          >
+            <Radio :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">{{ radioError }}</p>
+            <button
+              type="button"
+              class="mt-1 rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-rose-500"
+              @click="selectRadioRegion(activeRadioRegion, true)"
+            >
+              Retry
+            </button>
+          </div>
+
+          <!-- Empty state for Live Radio -->
+          <div
+            v-else-if="selectedFilter === 'radio' && filteredRadioStations.length === 0"
+            class="flex flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-900/40 py-12 text-center ring-1 ring-zinc-800"
+          >
+            <Radio :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">No radio stations found</p>
+            <p class="text-xs text-zinc-500">Try changing category or clearing your search.</p>
+          </div>
+
+          <!-- Live Radio Station Grid -->
+          <div v-else-if="selectedFilter === 'radio'" class="space-y-2">
             <div
-              class="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-              :class="selectedFilter === 'radio' ? 'border-rose-500' : 'border-indigo-500'"
-            ></div>
-            <p class="text-sm font-medium text-zinc-300">
-              {{ selectedFilter === 'radio' ? 'Tuning into live radio stream...' : 'Searching Jamendo catalog...' }}
-            </p>
+              v-for="station in filteredRadioStations"
+              :key="station.id"
+              class="group flex items-center justify-between rounded-2xl bg-zinc-900/50 p-2.5 ring-1 transition active:scale-[0.99] cursor-pointer hover:bg-zinc-800/60"
+              :class="
+                currentTrack?.id === station.id
+                  ? 'bg-rose-950/30 ring-rose-500/40'
+                  : getRadioStationStatus(station.id) === 'offline'
+                    ? 'ring-white/[0.03] opacity-75 hover:opacity-100 hover:ring-white/[0.08]'
+                    : 'ring-white/[0.06] active:bg-zinc-800/80'
+              "
+              @click="playTrackAndShow(station)"
+            >
+              <div class="flex min-w-0 flex-1 items-center gap-3 pr-2">
+                <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-950 p-1 ring-1 ring-white/10 flex items-center justify-center">
+                  <img
+                    v-if="station.coverUrl"
+                    :src="station.coverUrl"
+                    :alt="station.title"
+                    class="h-full w-full object-contain"
+                    loading="lazy"
+                    @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
+                  />
+                  <Radio v-else :size="20" class="text-rose-400" />
+
+                  <!-- Playing equalizer animation -->
+                  <div
+                    v-if="currentTrack?.id === station.id"
+                    class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl"
+                  >
+                    <span
+                      v-for="n in 3"
+                      :key="n"
+                      class="animate-eq mx-[1px] h-3.5 w-1 origin-bottom rounded-full bg-rose-400"
+                      :style="{ animationDelay: `${n * 0.15}s`, animationPlayState: isPlaying ? 'running' : 'paused' }"
+                    ></span>
+                  </div>
+                </div>
+
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <p
+                      class="truncate text-sm font-semibold transition-colors"
+                      :class="
+                        currentTrack?.id === station.id
+                          ? 'text-rose-300 font-bold'
+                          : getRadioStationStatus(station.id) === 'offline'
+                            ? 'text-zinc-400 group-hover:text-zinc-200'
+                            : 'text-zinc-100 group-hover:text-rose-300'
+                      "
+                    >
+                      {{ station.title }}
+                    </p>
+                    <span
+                      v-if="station.bitrate"
+                      class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
+                    >
+                      {{ station.bitrate }}K
+                    </span>
+                    <span
+                      v-else-if="station.codec"
+                      class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-400 ring-1 ring-rose-500/30"
+                    >
+                      {{ station.codec }}
+                    </span>
+                  </div>
+                  <p class="truncate text-xs text-zinc-400">{{ station.artist || 'Live Radio' }}</p>
+                </div>
+              </div>
+
+              <div class="flex shrink-0 items-center gap-2">
+                <!-- Network Strength Badge -->
+                <div
+                  v-if="getRadioStationStatus(station.id) !== 'offline'"
+                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 transition"
+                  :class="
+                    getRadioNetworkStrength(station.id) === 'excellent'
+                      ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/25'
+                      : getRadioNetworkStrength(station.id) === 'good'
+                        ? 'bg-teal-500/10 text-teal-400 ring-teal-500/25'
+                        : getRadioNetworkStrength(station.id) === 'fair'
+                          ? 'bg-amber-500/10 text-amber-400 ring-amber-500/25'
+                          : 'bg-zinc-800/80 text-zinc-400 ring-white/10'
+                  "
+                  :title="
+                    getRadioStationLatency(station.id)
+                      ? `Network Ping: ${getRadioStationLatency(station.id)}ms (${getRadioNetworkStrength(station.id)})`
+                      : 'Stream Signal: Good'
+                  "
+                >
+                  <SignalHigh
+                    v-if="getRadioNetworkStrength(station.id) === 'excellent'"
+                    :size="12"
+                    class="text-emerald-400"
+                  />
+                  <SignalMedium
+                    v-else-if="getRadioNetworkStrength(station.id) === 'good'"
+                    :size="12"
+                    class="text-teal-400"
+                  />
+                  <SignalLow
+                    v-else-if="getRadioNetworkStrength(station.id) === 'fair' || getRadioNetworkStrength(station.id) === 'poor'"
+                    :size="12"
+                    class="text-amber-400"
+                  />
+                  <SignalZero
+                    v-else
+                    :size="12"
+                    class="text-zinc-500"
+                  />
+                  <span
+                    v-if="getRadioStationLatency(station.id)"
+                    class="font-mono text-[9px] font-semibold text-zinc-300"
+                  >
+                    {{ getRadioStationLatency(station.id) }}ms
+                  </span>
+                  <span
+                    v-else-if="getRadioStationStatus(station.id) === 'online'"
+                    class="font-mono text-[9px] font-semibold text-emerald-400/90"
+                  >
+                    Good
+                  </span>
+                  <span
+                    v-else
+                    class="flex items-center gap-1 text-[9px] text-zinc-400 font-medium"
+                  >
+                    <span class="h-1 w-1 rounded-full bg-rose-400 animate-ping"></span>
+                    <span>Checking...</span>
+                  </span>
+                </div>
+
+                <!-- Favorite Heart Button -->
+                <button
+                  type="button"
+                  class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition active:scale-90"
+                  :class="{ 'text-rose-500': likedIds.has(station.id) }"
+                  :aria-label="likedIds.has(station.id) ? 'Unlike' : 'Like'"
+                  @click.stop="toggleLike(station.id)"
+                >
+                  <Heart :size="15" :fill="likedIds.has(station.id) ? 'currentColor' : 'none'" />
+                </button>
+
+                <!-- Circular Play Button -->
+                <button
+                  type="button"
+                  class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white active:scale-90"
+                  :aria-label="currentTrack?.id === station.id && isPlaying ? 'Pause' : 'Play'"
+                  @click.stop="toggleTrackPlayback(station)"
+                >
+                  <Pause v-if="currentTrack?.id === station.id && isPlaying" :size="14" fill="currentColor" />
+                  <Play v-else :size="14" fill="currentColor" class="translate-x-0.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading state for online music -->
+          <div
+            v-else-if="isLoadingOnline && selectedFilter === 'online' && filteredTracks.length === 0"
+            class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-16 text-center ring-1 ring-zinc-800"
+          >
+            <div class="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
+            <p class="text-sm font-medium text-zinc-300">Searching Jamendo catalog...</p>
             <p class="text-xs text-zinc-500">
-              {{
-                selectedFilter === 'radio'
-                  ? (searchQuery.trim() ? `Searching radio directory for “${searchQuery.trim()}”` : `Loading ${activeRadioLabel}...`)
-                  : (searchQuery.trim() ? `Searching for “${searchQuery.trim()}”` : 'Fetching curated music from Jamendo')
-              }}
+              {{ searchQuery.trim() ? `Searching for “${searchQuery.trim()}”` : 'Fetching curated music from Jamendo' }}
             </p>
           </div>
 
-          <!-- Error state for online / radio -->
+          <!-- Error state for online music -->
           <div
-            v-else-if="((selectedFilter === 'online' && onlineError) || (selectedFilter === 'radio' && radioError)) && filteredTracks.length === 0"
+            v-else-if="selectedFilter === 'online' && onlineError && filteredTracks.length === 0"
             class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-zinc-900/40 py-12 px-6 text-center ring-1 ring-zinc-800"
           >
-            <Radio v-if="selectedFilter === 'radio'" :size="32" class="text-zinc-600" />
-            <Globe v-else :size="32" class="text-zinc-600" />
-            <p class="text-sm font-medium text-zinc-300">{{ selectedFilter === 'radio' ? radioError : onlineError }}</p>
+            <Globe :size="32" class="text-zinc-600" />
+            <p class="text-sm font-medium text-zinc-300">{{ onlineError }}</p>
             <button
               type="button"
-              class="mt-1 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95"
-              :class="selectedFilter === 'radio' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-indigo-600 hover:bg-indigo-500'"
-              @click="selectedFilter === 'radio' ? fetchRadioStations(true) : fetchOnlineTracks(true)"
+              class="mt-1 rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md active:scale-95 hover:bg-indigo-500"
+              @click="fetchOnlineTracks(true)"
             >
               Retry
             </button>
@@ -1070,18 +1396,14 @@ onBeforeUnmount(() => {
                   searchQuery
                     ? (selectedFilter === 'online'
                         ? `No online tracks matching “${searchQuery}”.`
-                        : selectedFilter === 'radio'
-                          ? `No radio stations matching “${searchQuery}”.`
-                          : `No tracks matching “${searchQuery}”. Try searching online music or importing files.`)
+                        : `No tracks matching “${searchQuery}”. Try searching online music or importing files.`)
                     : selectedFilter === 'liked'
                       ? 'No liked tracks yet. Tap the heart on any song to add it!'
                       : selectedFilter === 'recent'
                         ? 'No recently played tracks yet.'
                         : selectedFilter === 'online'
                           ? 'No online music found. Try another genre.'
-                          : selectedFilter === 'radio'
-                            ? 'No radio stations found. Try another category.'
-                            : 'Import audio files from your device or stream free online music.'
+                          : 'Import audio files from your device or stream free online music.'
                 }}
               </p>
             </div>
@@ -1816,6 +2138,208 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </transition>
+
+    <!-- ============================================================== -->
+    <!-- RIGHT SIDE PUSH MENU DRAWER                                    -->
+    <!-- ============================================================== -->
+    <!-- Backdrop Overlay -->
+    <div
+      class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
+      :class="menuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'"
+      aria-hidden="true"
+      @click="menuOpen = false"
+    ></div>
+
+    <!-- Side Push Drawer -->
+    <aside
+      class="fixed inset-y-0 right-0 z-50 flex w-80 max-w-[85vw] flex-col justify-between bg-zinc-900/95 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl transition-transform duration-300 ease-out"
+      :class="menuOpen ? 'translate-x-0' : 'translate-x-full'"
+      :style="menuDragOffset > 0 ? { transform: `translateX(${menuDragOffset}px)`, transition: 'none' } : {}"
+      :inert="menuOpen ? undefined : true"
+      role="dialog"
+      aria-label="Navigation and about menu"
+      @touchstart="onMenuTouchStart"
+      @touchmove="onMenuTouchMove"
+      @touchend="onMenuTouchEnd"
+      @touchcancel="onMenuTouchEnd"
+    >
+      <!-- Top Scrollable Section -->
+      <div class="flex-1 overflow-y-auto px-5 space-y-6">
+        <!-- Drawer Header -->
+        <div class="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+          <div class="flex items-center gap-2.5">
+            <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400 ring-1 ring-indigo-500/30">
+              <AudioLines :size="16" />
+            </div>
+            <h2 class="text-base font-bold text-white tracking-tight">Menu</h2>
+          </div>
+          <button
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/10 transition active:scale-90 hover:text-white"
+            aria-label="Close menu"
+            @click="menuOpen = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
+
+        <!-- Quick Navigation Section -->
+        <div class="space-y-1.5">
+          <p class="px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            Navigation
+          </p>
+          <div class="space-y-1">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
+              :class="selectedFilter === 'all' && activeTab === 'library' ? 'bg-indigo-950/40 text-indigo-300 ring-1 ring-indigo-500/30' : 'text-zinc-200'"
+              @click="selectedFilter = 'all'; activeTab = 'library'; menuOpen = false"
+            >
+              <div class="flex items-center gap-2.5">
+                <Music :size="16" class="text-indigo-400" />
+                <span>Offline Music</span>
+              </div>
+              <span class="rounded-full bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-400 font-medium">
+                {{ localCount }}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
+              :class="selectedFilter === 'online' && activeTab === 'library' ? 'bg-indigo-950/40 text-indigo-300 ring-1 ring-indigo-500/30' : 'text-zinc-200'"
+              @click="selectOnlineFilter(); activeTab = 'library'; menuOpen = false"
+            >
+              <div class="flex items-center gap-2.5">
+                <Globe :size="16" class="text-indigo-400" />
+                <span>Online Music</span>
+              </div>
+              <ChevronRight :size="14" class="text-zinc-500" />
+            </button>
+
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
+              :class="selectedFilter === 'radio' && activeTab === 'library' ? 'bg-rose-950/40 text-rose-300 ring-1 ring-rose-500/30' : 'text-zinc-200'"
+              @click="selectRadioFilter(); activeTab = 'library'; menuOpen = false"
+            >
+              <div class="flex items-center gap-2.5">
+                <Radio :size="16" class="text-rose-400" />
+                <span>Live Radio</span>
+              </div>
+              <ChevronRight :size="14" class="text-zinc-500" />
+            </button>
+
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl p-2.5 text-xs font-semibold transition active:scale-[0.98] hover:bg-zinc-800/80"
+              :class="selectedFilter === 'tv' && activeTab === 'library' ? 'bg-amber-950/40 text-amber-300 ring-1 ring-amber-500/30' : 'text-zinc-200'"
+              @click="selectTvFilter(); activeTab = 'library'; menuOpen = false"
+            >
+              <div class="flex items-center gap-2.5">
+                <Tv :size="16" class="text-amber-400" />
+                <span>Live TV</span>
+              </div>
+              <ChevronRight :size="14" class="text-zinc-500" />
+            </button>
+          </div>
+        </div>
+
+        <!-- About Section -->
+        <div class="space-y-2">
+          <div class="flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            <Info :size="12" />
+            <span>About</span>
+          </div>
+
+          <!-- About Card -->
+          <div class="rounded-2xl bg-zinc-800/40 p-4 ring-1 ring-white/[0.08] space-y-3.5">
+            <div class="flex items-start gap-3">
+              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-indigo-400 shadow-md shadow-indigo-600/30 ring-1 ring-white/20">
+                <AudioLines :size="20" class="text-white" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-bold text-white">Pulse Player</h3>
+                  <span class="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold text-indigo-300 ring-1 ring-indigo-500/30">
+                    v1.0.0
+                  </span>
+                </div>
+                <p class="text-[11px] text-zinc-400 leading-tight mt-0.5">
+                  Private, offline-first media hub for music, radio, and television.
+                </p>
+              </div>
+            </div>
+
+            <!-- Check for Update Button & Status -->
+            <div class="space-y-2 pt-1 border-t border-white/[0.06]">
+              <button
+                type="button"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 ring-1 ring-white/20 transition active:scale-[0.98] hover:bg-indigo-500 disabled:opacity-60"
+                :disabled="isCheckingUpdate"
+                @click="checkForUpdate"
+              >
+                <RefreshCw
+                  :size="14"
+                  :class="{ 'animate-spin': isCheckingUpdate }"
+                />
+                <span>{{ isCheckingUpdate ? 'Checking for updates...' : 'Check for update' }}</span>
+              </button>
+
+              <!-- Update Status Alert -->
+              <transition
+                enter-active-class="transition duration-150 ease-out"
+                enter-from-class="-translate-y-1 opacity-0"
+                enter-to-class="translate-y-0 opacity-100"
+              >
+                <div
+                  v-if="updateStatus === 'latest'"
+                  class="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-2.5 text-[11px] font-medium text-emerald-400 ring-1 ring-emerald-500/20"
+                >
+                  <Check :size="13" class="shrink-0" />
+                  <span>Pulse is up to date (checked {{ lastUpdateChecked }})</span>
+                </div>
+
+                <div
+                  v-else-if="updateStatus === 'update_available'"
+                  class="flex flex-col gap-2 rounded-xl bg-amber-500/15 p-2.5 text-[11px] text-amber-200 ring-1 ring-amber-500/30"
+                >
+                  <div class="flex items-center gap-1.5 font-semibold text-amber-300">
+                    <Sparkles :size="13" />
+                    <span>New version available!</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded-lg bg-amber-500 py-1.5 px-3 text-[11px] font-bold text-zinc-950 transition active:scale-95 hover:bg-amber-400"
+                    @click="applyUpdate"
+                  >
+                    Reload to Update
+                  </button>
+                </div>
+
+                <div
+                  v-else-if="updateStatus === 'error'"
+                  class="rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-400 ring-1 ring-rose-500/20"
+                >
+                  Unable to check for updates. Check internet connection.
+                </div>
+              </transition>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Drawer Footer -->
+      <div class="px-5 pt-3 border-t border-white/[0.08]">
+        <div class="flex items-center justify-between text-[11px] text-zinc-500">
+          <div class="flex items-center gap-1.5 text-zinc-400">
+            <ShieldCheck :size="13" class="text-emerald-400" />
+            <span>Zero tracking · 100% private</span>
+          </div>
+          <span class="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[9px] text-zinc-400">PWA</span>
+        </div>
+      </div>
+    </aside>
 
     <!-- Live TV Player Modal (HLS.js / Safari Native) -->
     <LiveTvModal

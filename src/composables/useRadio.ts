@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { PlayableTrack } from '../types/music'
 
 const RADIO_SERVERS = [
@@ -6,27 +6,96 @@ const RADIO_SERVERS = [
   'https://all.api.radio-browser.info',
 ]
 
-const CACHE_PREFIX = 'pulse:radio_cat:'
+const CACHE_PREFIX = 'pulse:radio_reg:'
+const HEALTH_CACHE_KEY = 'pulse:radio_health_cache_v1'
+const LATENCY_CACHE_KEY = 'pulse:radio_latency_cache_v1'
+
+export type RadioRegionId =
+  | 'bd'
+  | 'in'
+  | 'pk'
+  | 'us'
+  | 'uk'
+  | 'sa'
+  | 'ae'
+  | 'qa'
+  | 'ca'
+  | 'au'
+  | 'tr'
+  | 'de'
+  | 'fr'
+  | 'es'
+  | 'it'
+  | 'jp'
+  | 'kr'
+  | 'my'
+  | 'id'
+  | 'sg'
+  | 'br'
+  | 'global'
+
+export interface RadioRegion {
+  id: RadioRegionId
+  label: string
+  flag: string
+  countryCode: string
+}
+
+export const RADIO_REGIONS: RadioRegion[] = [
+  // 1st Priority
+  { id: 'bd', label: 'Bangladesh', flag: '🇧🇩', countryCode: 'BD' },
+  // 2nd Priority
+  { id: 'in', label: 'India', flag: '🇮🇳', countryCode: 'IN' },
+  // 3rd Priority
+  { id: 'pk', label: 'Pakistan', flag: '🇵🇰', countryCode: 'PK' },
+  // Top Global Countries
+  { id: 'us', label: 'United States', flag: '🇺🇸', countryCode: 'US' },
+  { id: 'uk', label: 'United Kingdom', flag: '🇬🇧', countryCode: 'GB' },
+  { id: 'sa', label: 'Saudi Arabia', flag: '🇸🇦', countryCode: 'SA' },
+  { id: 'ae', label: 'UAE', flag: '🇦🇪', countryCode: 'AE' },
+  { id: 'qa', label: 'Qatar', flag: '🇶🇦', countryCode: 'QA' },
+  { id: 'ca', label: 'Canada', flag: '🇨🇦', countryCode: 'CA' },
+  { id: 'au', label: 'Australia', flag: '🇦🇺', countryCode: 'AU' },
+  { id: 'tr', label: 'Turkey', flag: '🇹🇷', countryCode: 'TR' },
+  { id: 'de', label: 'Germany', flag: '🇩🇪', countryCode: 'DE' },
+  { id: 'fr', label: 'France', flag: '🇫🇷', countryCode: 'FR' },
+  { id: 'es', label: 'Spain', flag: '🇪🇸', countryCode: 'ES' },
+  { id: 'it', label: 'Italy', flag: '🇮🇹', countryCode: 'IT' },
+  { id: 'jp', label: 'Japan', flag: '🇯🇵', countryCode: 'JP' },
+  { id: 'kr', label: 'South Korea', flag: '🇰🇷', countryCode: 'KR' },
+  { id: 'my', label: 'Malaysia', flag: '🇲🇾', countryCode: 'MY' },
+  { id: 'id', label: 'Indonesia', flag: '🇮🇩', countryCode: 'ID' },
+  { id: 'sg', label: 'Singapore', flag: '🇸🇬', countryCode: 'SG' },
+  { id: 'br', label: 'Brazil', flag: '🇧🇷', countryCode: 'BR' },
+  { id: 'global', label: 'Top Global', flag: '🌍', countryCode: '' },
+]
+
+export type RadioCategoryId =
+  | 'all'
+  | 'music'
+  | 'news'
+  | 'lofi'
+  | 'islamic'
+  | 'rock'
+  | 'classical'
+  | 'dance'
+  | 'folk'
 
 export interface RadioCategory {
-  id: string
+  id: RadioCategoryId
   label: string
-  kind: 'country' | 'tag'
-  query: string
 }
 
 export const RADIO_CATEGORIES: RadioCategory[] = [
-  { id: 'bangladesh', label: '🇧🇩 Bangladesh', kind: 'country', query: 'Bangladesh' },
-  { id: 'lofi', label: 'Lofi', kind: 'tag', query: 'lofi' },
-  { id: 'chillout', label: 'Chillout', kind: 'tag', query: 'chillout' },
-  { id: 'synthwave', label: 'Synthwave', kind: 'tag', query: 'synthwave' },
-  { id: 'jazz', label: 'Jazz', kind: 'tag', query: 'jazz' },
-  { id: 'classical', label: 'Classical', kind: 'tag', query: 'classical' },
-  { id: 'rock', label: 'Rock', kind: 'tag', query: 'rock' },
-  { id: 'pop', label: 'Pop', kind: 'tag', query: 'pop' },
-  { id: 'ambient', label: 'Ambient', kind: 'tag', query: 'ambient' },
-  { id: 'news', label: 'News / Talk', kind: 'tag', query: 'news' },
-  { id: 'islamic', label: 'Quran / Islamic', kind: 'tag', query: 'quran' },
+  { id: 'all', label: 'All Stations' },
+  { id: 'music', label: 'Hits & Pop' },
+  { id: 'news', label: 'News & Talk' },
+  { id: 'lofi', label: 'Lofi & Chill' },
+  { id: 'islamic', label: 'Quran & Islamic' },
+  { id: 'rock', label: 'Rock' },
+  { id: 'classical', label: 'Classical & Jazz' },
+  { id: 'dance', label: 'Dance & EDM' },
+  { id: 'folk', label: 'Folk & Desi' },
 ]
 
 export interface RadioBrowserStation {
@@ -45,16 +114,63 @@ export interface RadioBrowserStation {
   votes?: number
 }
 
-const DEFAULT_BANGLADESH_STATIONS: PlayableTrack[] = [
+export interface RadioStation extends PlayableTrack {
+  country?: string
+  countryCode?: string
+  codec?: string
+  bitrate?: number
+  votes?: number
+  tags?: string
+}
+
+export type RadioHealthStatus = 'unknown' | 'checking' | 'online' | 'offline'
+export type NetworkStrengthLevel = 'excellent' | 'good' | 'fair' | 'poor' | 'offline' | 'unknown'
+
+const DEFAULT_BANGLADESH_STATIONS: RadioStation[] = [
+  {
+    id: 'radio-bd-quran',
+    title: 'Al-Quran Bangla',
+    artist: 'Bangladesh • Islamic • 128k',
+    duration: 0,
+    src: 'http://66.45.232.131:9994/;stream/1/;',
+    coverUrl: 'https://www.liveonlineradio.net/wp-content/uploads/2012/03/Bangla-Al-Quran.jpg',
+    kind: 'stream',
+    createdAt: 1,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 128,
+    tags: 'quran,islamic,religious,bangla',
+  },
+  {
+    id: 'radio-bd-ullash',
+    title: 'Radio Ullash',
+    artist: 'Bangladesh • Dhaka • 128k',
+    duration: 0,
+    src: 'https://stream.zeno.fm/gpgkgp9mp18uv.mp3',
+    coverUrl: 'https://radioullash.com/wp-content/uploads/2021/04/radio-ullash-logo.png',
+    kind: 'stream',
+    createdAt: 2,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 128,
+    tags: 'music,pop,hits,bangla',
+  },
   {
     id: 'radio-bd-dhakafm',
     title: 'Dhaka FM 90.4',
-    artist: 'Bangladesh • Dhaka • 128k',
+    artist: 'Bangladesh • Dhaka • 64k',
     duration: 0,
     src: 'https://play.dhakafm904.com/;',
     coverUrl: 'https://i.postimg.cc/Z5MBwBZ5/dhaka-fm.png',
     kind: 'stream',
-    createdAt: 1,
+    createdAt: 3,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 64,
+    tags: 'dhaka,fm,hits,bangla',
   },
   {
     id: 'radio-bd-today',
@@ -64,7 +180,12 @@ const DEFAULT_BANGLADESH_STATIONS: PlayableTrack[] = [
     src: 'https://stream-285.surfernetwork.com/8wv4d8g4344tv',
     coverUrl: 'https://i.postimg.cc/MT7JFPDK/radio-today.png',
     kind: 'stream',
-    createdAt: 2,
+    createdAt: 4,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 128,
+    tags: 'news,music,bangla,talk',
   },
   {
     id: 'radio-bd-foorti',
@@ -74,7 +195,12 @@ const DEFAULT_BANGLADESH_STATIONS: PlayableTrack[] = [
     src: 'https://radiofoorti.fm/api/stream',
     coverUrl: 'https://i.postimg.cc/0NWMBYGh/radio-foorti.png',
     kind: 'stream',
-    createdAt: 3,
+    createdAt: 5,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 128,
+    tags: 'pop,hits,bangla',
   },
   {
     id: 'radio-bd-bhumi',
@@ -84,37 +210,12 @@ const DEFAULT_BANGLADESH_STATIONS: PlayableTrack[] = [
     src: 'https://stream.zeno.fm/be5bqmk1k18uv',
     coverUrl: 'https://cdn-radiotime-logos.tunein.com/s151241d.png',
     kind: 'stream',
-    createdAt: 4,
-  },
-  {
-    id: 'radio-bd-shadhin',
-    title: 'Radio Shadhin 92.4 FM',
-    artist: 'Bangladesh • Dhaka',
-    duration: 0,
-    src: 'https://stream.zeno.fm/eabgu655puquv',
-    coverUrl: '',
-    kind: 'stream',
-    createdAt: 5,
-  },
-  {
-    id: 'radio-bd-ullash',
-    title: 'Radio Ullash',
-    artist: 'Bangladesh • 128k MP3',
-    duration: 0,
-    src: 'https://stream.zeno.fm/gpgkgp9mp18uv.mp3',
-    coverUrl: 'https://radioullash.com/wp-content/uploads/2021/04/radio-ullash-logo.png',
-    kind: 'stream',
     createdAt: 6,
-  },
-  {
-    id: 'radio-bd-quran',
-    title: 'Al-Quran Bangla',
-    artist: 'Bangladesh • Islamic • 128k',
-    duration: 0,
-    src: 'http://66.45.232.131:9994/;stream/1/;',
-    coverUrl: 'https://www.liveonlineradio.net/wp-content/uploads/2012/03/Bangla-Al-Quran.jpg',
-    kind: 'stream',
-    createdAt: 7,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 192,
+    tags: 'folk,bangla,culture',
   },
   {
     id: 'radio-bd-peoples',
@@ -124,17 +225,109 @@ const DEFAULT_BANGLADESH_STATIONS: PlayableTrack[] = [
     src: 'https://s3.myradiostream.com:14498/listen.mp3',
     coverUrl: 'https://i.postimg.cc/gc6kkfKK/peoples-radio.png',
     kind: 'stream',
+    createdAt: 7,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 96,
+    tags: 'talk,pop,bangla',
+  },
+  {
+    id: 'radio-bd-goongoon',
+    title: 'Radio GoonGoon',
+    artist: 'Bangladesh • 192k MP3',
+    duration: 0,
+    src: 'https://audio.streamcast.xyz/listen/radiogoongoon/radio.mp3',
+    coverUrl: '',
+    kind: 'stream',
     createdAt: 8,
+    country: 'Bangladesh',
+    countryCode: 'BD',
+    codec: 'MP3',
+    bitrate: 192,
+    tags: 'music,desi,bangla',
   },
 ]
 
-const radioStations = ref<PlayableTrack[]>([])
+// State variables
+const stations = ref<RadioStation[]>([])
 const isLoadingRadio = ref(false)
+const isCheckingHealth = ref(false)
 const radioError = ref<string | null>(null)
-const activeRadioCategoryId = ref('bangladesh')
+const activeRegion = ref<RadioRegionId>('bd')
+const activeCategory = ref<RadioCategoryId>('all')
 const currentRadioSearch = ref('')
 
-const radioCache = new Map<string, PlayableTrack[]>()
+const stationHealth = ref<Record<string, RadioHealthStatus>>({})
+const stationLatency = ref<Record<string, number>>({})
+const radioCache = new Map<string, RadioStation[]>()
+
+let saveHealthTimer: number | undefined
+
+function loadHealthCache(): void {
+  try {
+    const storedH = sessionStorage.getItem(HEALTH_CACHE_KEY)
+    if (storedH) {
+      const parsed = JSON.parse(storedH) as Record<string, RadioHealthStatus>
+      if (parsed && typeof parsed === 'object') {
+        stationHealth.value = parsed
+      }
+    }
+    const storedL = sessionStorage.getItem(LATENCY_CACHE_KEY)
+    if (storedL) {
+      const parsedL = JSON.parse(storedL) as Record<string, number>
+      if (parsedL && typeof parsedL === 'object') {
+        stationLatency.value = parsedL
+      }
+    }
+  } catch {}
+}
+loadHealthCache()
+
+function persistHealthCache(): void {
+  if (typeof window === 'undefined') return
+  window.clearTimeout(saveHealthTimer)
+  saveHealthTimer = window.setTimeout(() => {
+    try {
+      sessionStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify(stationHealth.value))
+      sessionStorage.setItem(LATENCY_CACHE_KEY, JSON.stringify(stationLatency.value))
+    } catch {}
+  }, 400)
+}
+
+export function getStationStatus(stationId: string): RadioHealthStatus {
+  return stationHealth.value[stationId] || 'unknown'
+}
+
+export function setStationStatus(stationId: string, status: RadioHealthStatus): void {
+  stationHealth.value[stationId] = status
+  persistHealthCache()
+}
+
+export function getStationLatency(stationId: string): number | undefined {
+  return stationLatency.value[stationId]
+}
+
+export function setStationLatency(stationId: string, latencyMs: number): void {
+  stationLatency.value[stationId] = latencyMs
+  persistHealthCache()
+}
+
+export function getStationNetworkStrength(stationId: string): NetworkStrengthLevel {
+  const status = stationHealth.value[stationId]
+  if (status === 'offline') return 'offline'
+
+  const lat = stationLatency.value[stationId]
+  if (lat !== undefined) {
+    if (lat < 350) return 'excellent'
+    if (lat < 700) return 'good'
+    if (lat < 1400) return 'fair'
+    return 'poor'
+  }
+
+  if (status === 'online') return 'good'
+  return 'unknown'
+}
 
 /** Generates clean SVG artwork for radio stations without favicons */
 function getStationCover(station: RadioBrowserStation): string {
@@ -142,22 +335,21 @@ function getStationCover(station: RadioBrowserStation): string {
     return station.favicon
   }
 
-  // Pre-rendered clean SVG radio emblem
   return (
     'data:image/svg+xml;utf8,' +
     encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
       <defs>
         <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#4f46e5"/>
+          <stop offset="0%" stop-color="#e11d48"/>
           <stop offset="100%" stop-color="#09090b"/>
         </linearGradient>
       </defs>
       <rect width="256" height="256" rx="48" fill="url(#g)"/>
-      <circle cx="128" cy="138" r="38" stroke="#a5b4fc" stroke-width="8" fill="none" opacity="0.8"/>
+      <circle cx="128" cy="138" r="38" stroke="#fda4af" stroke-width="8" fill="none" opacity="0.8"/>
       <circle cx="128" cy="138" r="16" fill="#f43f5e"/>
       <path d="M78 88 A76 76 0 0 1 178 88" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" fill="none"/>
-      <path d="M54 64 A110 110 0 0 1 202 64" stroke="#818cf8" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.6"/>
+      <path d="M54 64 A110 110 0 0 1 202 64" stroke="#fb7185" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.6"/>
     </svg>
   `)
   )
@@ -169,7 +361,6 @@ function sanitizeStreamUrl(url: string): string {
   if (cleaned.includes('zeno.fm')) {
     cleaned = cleaned.replace(/^http:\/\/stream\.zeno\.fm/, 'https://stream.zeno.fm')
     cleaned = cleaned.replace(/^http:\/\/stream-(\d+)\.zeno\.fm/, 'https://stream-$1.zeno.fm')
-    // Remove expired ?zt= tokens so Zeno generates a fresh token on connect
     const qIndex = cleaned.indexOf('?')
     if (qIndex !== -1) {
       cleaned = cleaned.slice(0, qIndex)
@@ -178,7 +369,7 @@ function sanitizeStreamUrl(url: string): string {
   return cleaned
 }
 
-function toPlayableTrack(station: RadioBrowserStation): PlayableTrack {
+function toRadioStation(station: RadioBrowserStation): RadioStation {
   const streamSrc = sanitizeStreamUrl(station.url_resolved || station.url)
   const metaParts: string[] = []
   if (station.country) metaParts.push(station.country)
@@ -194,18 +385,24 @@ function toPlayableTrack(station: RadioBrowserStation): PlayableTrack {
     coverUrl: getStationCover(station),
     kind: 'stream',
     createdAt: Date.now(),
+    country: station.country,
+    countryCode: station.countrycode,
+    codec: station.codec,
+    bitrate: station.bitrate,
+    votes: station.votes,
+    tags: station.tags,
   }
 }
 
 /** Fetch from Radio Browser with automatic fallback across multi-region mirrors */
-async function fetchFromRadioBrowser(path: string): Promise<PlayableTrack[]> {
+async function fetchFromRadioBrowser(path: string): Promise<RadioStation[]> {
   let lastError: unknown = null
 
   for (const server of RADIO_SERVERS) {
     const url = `${server}${path}`
     try {
       const controller = new AbortController()
-      const timeoutId = window.setTimeout(() => controller.abort(), 6000)
+      const timeoutId = window.setTimeout(() => controller.abort(), 6500)
 
       const response = await fetch(url, {
         headers: { 'User-Agent': 'PulsePlayer/1.0' },
@@ -220,9 +417,8 @@ async function fetchFromRadioBrowser(path: string): Promise<PlayableTrack[]> {
       const list = (await response.json()) as RadioBrowserStation[]
       if (!Array.isArray(list)) return []
 
-      // Deduplicate by normalized station name and filter out invalid streams
       const seen = new Set<string>()
-      const result: PlayableTrack[] = []
+      const result: RadioStation[] = []
 
       for (const item of list) {
         const streamUrl = (item.url_resolved || item.url || '').trim()
@@ -230,7 +426,7 @@ async function fetchFromRadioBrowser(path: string): Promise<PlayableTrack[]> {
         const normName = (item.name || '').trim().toLowerCase()
         if (normName && seen.has(normName)) continue
         if (normName) seen.add(normName)
-        result.push(toPlayableTrack(item))
+        result.push(toRadioStation(item))
       }
 
       return result
@@ -242,40 +438,177 @@ async function fetchFromRadioBrowser(path: string): Promise<PlayableTrack[]> {
   throw lastError ?? new Error('All radio mirrors failed to respond')
 }
 
+/** Check station health and measure latency */
+export async function checkStationHealth(
+  station: RadioStation,
+  timeoutMs = 2500,
+): Promise<{ status: RadioHealthStatus; latencyMs?: number; strength: NetworkStrengthLevel }> {
+  const sanitized = sanitizeStreamUrl(station.src)
+  if (!sanitized) {
+    return { status: 'offline', strength: 'offline' }
+  }
+
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  const startTime = performance.now()
+
+  try {
+    const res = await fetch(sanitized, {
+      method: 'GET',
+      signal: controller.signal,
+    })
+
+    window.clearTimeout(timeoutId)
+    const latencyMs = Math.max(10, Math.round(performance.now() - startTime))
+
+    try {
+      void res.body?.cancel()
+    } catch {}
+
+    if (res.ok || res.status === 206 || res.status === 304 || (res.status >= 300 && res.status < 400)) {
+      let strength: NetworkStrengthLevel = 'excellent'
+      if (latencyMs < 350) strength = 'excellent'
+      else if (latencyMs < 700) strength = 'good'
+      else strength = 'fair'
+
+      return { status: 'online', latencyMs, strength }
+    }
+
+    if (res.status === 404 || res.status === 410 || res.status === 403 || res.status >= 500) {
+      return { status: 'offline', strength: 'offline' }
+    }
+
+    return { status: 'online', latencyMs, strength: latencyMs < 500 ? 'good' : 'fair' }
+  } catch {
+    window.clearTimeout(timeoutId)
+    return { status: 'offline', strength: 'offline' }
+  }
+}
+
+const inFlightChecks = new Set<string>()
+
+export async function runBackgroundHealthCheck(
+  targetStations: RadioStation[],
+  concurrency = 8,
+): Promise<void> {
+  if (!targetStations || targetStations.length === 0) return
+
+  const pending = targetStations.filter((s) => {
+    if (inFlightChecks.has(s.id)) return false
+    const status = stationHealth.value[s.id]
+    const latency = stationLatency.value[s.id]
+    return !status || status === 'unknown' || latency === undefined
+  })
+
+  if (pending.length === 0) return
+
+  isCheckingHealth.value = true
+
+  const worker = async () => {
+    while (pending.length > 0) {
+      const station = pending.shift()
+      if (!station) break
+      inFlightChecks.add(station.id)
+      try {
+        const result = await checkStationHealth(station)
+        setStationStatus(station.id, result.status)
+        if (result.latencyMs !== undefined) {
+          setStationLatency(station.id, result.latencyMs)
+        }
+      } catch {
+        setStationStatus(station.id, 'offline')
+      } finally {
+        inFlightChecks.delete(station.id)
+      }
+    }
+  }
+
+  const pool = Array.from({ length: Math.min(concurrency, pending.length) }, () => worker())
+  await Promise.all(pool)
+  isCheckingHealth.value = false
+}
+
 export function useRadio() {
-  async function selectRadioCategory(categoryId: string, force = false): Promise<PlayableTrack[]> {
-    activeRadioCategoryId.value = categoryId
+  /** Filtered stations according to category, search query, and excluding offline stations */
+  const filteredStations = computed(() => {
+    let list = stations.value
+
+    // 1. Category Filter
+    if (activeCategory.value !== 'all') {
+      const target = activeCategory.value
+      const filtered = list.filter((s) => {
+        const tags = (s.tags || '').toLowerCase()
+        const title = s.title.toLowerCase()
+        const artist = s.artist.toLowerCase()
+        const combined = `${tags} ${title} ${artist}`
+
+        if (target === 'news') return combined.includes('news') || combined.includes('talk') || combined.includes('khobor') || combined.includes('samachar')
+        if (target === 'islamic') return combined.includes('quran') || combined.includes('islam') || combined.includes('koran') || combined.includes('muslim') || combined.includes('allah')
+        if (target === 'lofi') return combined.includes('lofi') || combined.includes('chill') || combined.includes('ambient') || combined.includes('relax') || combined.includes('lounge')
+        if (target === 'rock') return combined.includes('rock') || combined.includes('metal') || combined.includes('alternative') || combined.includes('punk') || combined.includes('indie')
+        if (target === 'classical') return combined.includes('classical') || combined.includes('jazz') || combined.includes('blues') || combined.includes('symphony') || combined.includes('piano')
+        if (target === 'dance') return combined.includes('dance') || combined.includes('electronic') || combined.includes('house') || combined.includes('techno') || combined.includes('edm') || combined.includes('club')
+        if (target === 'folk') return combined.includes('folk') || combined.includes('traditional') || combined.includes('desi') || combined.includes('bangla') || combined.includes('bengali')
+        if (target === 'music') return combined.includes('pop') || combined.includes('music') || combined.includes('hits') || combined.includes('song') || combined.includes('fm')
+        return true
+      })
+      if (filtered.length > 0) {
+        list = filtered
+      }
+    }
+
+    // 2. Search query filter
+    if (currentRadioSearch.value.trim()) {
+      const q = currentRadioSearch.value.toLowerCase().trim()
+      list = list.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.artist.toLowerCase().includes(q) ||
+          (s.tags || '').toLowerCase().includes(q),
+      )
+    }
+
+    // 3. Exclude verified offline stations
+    list = list.filter((s) => getStationStatus(s.id) !== 'offline')
+
+    return list
+  })
+
+  async function selectRegion(regionId: RadioRegionId, force = false): Promise<RadioStation[]> {
+    activeRegion.value = regionId
     currentRadioSearch.value = ''
 
-    // Return from in-memory cache
-    if (!force && radioCache.has(categoryId)) {
-      const cached = radioCache.get(categoryId)!
-      radioStations.value = cached
+    const reg = RADIO_REGIONS.find((r) => r.id === regionId) ?? RADIO_REGIONS[0]
+
+    // In-memory cache
+    if (!force && radioCache.has(regionId)) {
+      const cached = radioCache.get(regionId)!
+      stations.value = cached
       radioError.value = null
+      void runBackgroundHealthCheck(cached)
       return cached
     }
 
     // Check localStorage cache
     if (!force) {
       try {
-        const stored = localStorage.getItem(`${CACHE_PREFIX}${categoryId}`)
+        const stored = localStorage.getItem(`${CACHE_PREFIX}${regionId}`)
         if (stored) {
-          const parsed = JSON.parse(stored) as PlayableTrack[]
+          const parsed = JSON.parse(stored) as RadioStation[]
           if (Array.isArray(parsed) && parsed.length > 0) {
-            radioCache.set(categoryId, parsed)
-            radioStations.value = parsed
+            radioCache.set(regionId, parsed)
+            stations.value = parsed
             radioError.value = null
+            void runBackgroundHealthCheck(parsed)
             return parsed
           }
         }
       } catch {}
     }
 
-    const cat = RADIO_CATEGORIES.find((c) => c.id === categoryId) ?? RADIO_CATEGORIES[0]
-
-    // Pre-seed with top Bangladeshi stations for instant offline-first playback
-    if (categoryId === 'bangladesh' && radioStations.value.length === 0) {
-      radioStations.value = DEFAULT_BANGLADESH_STATIONS
+    // Pre-seed top BD stations for immediate offline-first play
+    if (regionId === 'bd' && stations.value.length === 0) {
+      stations.value = DEFAULT_BANGLADESH_STATIONS
     }
 
     isLoadingRadio.value = true
@@ -283,36 +616,45 @@ export function useRadio() {
 
     try {
       let path = ''
-      if (cat.kind === 'country') {
-        path = `/json/stations/bycountry/${encodeURIComponent(cat.query)}?limit=35&hidebroken=true&order=votes&reverse=true`
+      if (reg.countryCode) {
+        path = `/json/stations/bycountrycodeexact/${encodeURIComponent(reg.countryCode)}?limit=60&hidebroken=true&order=votes&reverse=true`
       } else {
-        path = `/json/stations/bytag/${encodeURIComponent(cat.query)}?limit=25&hidebroken=true&order=votes&reverse=true`
+        path = `/json/stations?limit=60&hidebroken=true&order=votes&reverse=true`
       }
 
-      const stations = await fetchFromRadioBrowser(path)
-      radioStations.value = stations
-      radioCache.set(categoryId, stations)
+      const fetched = await fetchFromRadioBrowser(path)
+      stations.value = fetched.length > 0 ? fetched : (regionId === 'bd' ? DEFAULT_BANGLADESH_STATIONS : [])
+      radioCache.set(regionId, stations.value)
       try {
-        localStorage.setItem(`${CACHE_PREFIX}${categoryId}`, JSON.stringify(stations))
+        localStorage.setItem(`${CACHE_PREFIX}${regionId}`, JSON.stringify(stations.value))
       } catch {}
-      return stations
+      void runBackgroundHealthCheck(stations.value)
+      return stations.value
     } catch (err) {
-      console.warn('[Pulse] Failed to load radio category:', categoryId, err)
-      if (radioStations.value.length === 0) {
-        radioError.value = navigator.onLine
-          ? 'Could not connect to radio directory. Try refreshing.'
-          : 'You are offline. Connect to internet to stream live radio.'
+      console.warn('[Pulse] Failed to load radio region:', regionId, err)
+      if (stations.value.length === 0) {
+        if (regionId === 'bd') {
+          stations.value = DEFAULT_BANGLADESH_STATIONS
+        } else {
+          radioError.value = navigator.onLine
+            ? 'Could not connect to radio directory. Try refreshing.'
+            : 'You are offline. Connect to internet to stream live radio.'
+        }
       }
-      return radioStations.value
+      return stations.value
     } finally {
       isLoadingRadio.value = false
     }
   }
 
-  async function searchRadio(query: string): Promise<PlayableTrack[]> {
+  function selectCategory(categoryId: RadioCategoryId): void {
+    activeCategory.value = categoryId
+  }
+
+  async function searchRadio(query: string): Promise<RadioStation[]> {
     const clean = query.trim()
     if (!clean) {
-      return selectRadioCategory(activeRadioCategoryId.value)
+      return selectRegion(activeRegion.value)
     }
 
     currentRadioSearch.value = clean
@@ -320,21 +662,21 @@ export function useRadio() {
     radioError.value = null
 
     try {
-      // Tier 1: Search by name / tag / country
-      let path = `/json/stations/search?name=${encodeURIComponent(clean)}&limit=30&hidebroken=true&order=votes&reverse=true`
-      let stations = await fetchFromRadioBrowser(path)
+      let path = `/json/stations/search?name=${encodeURIComponent(clean)}&limit=35&hidebroken=true&order=votes&reverse=true`
+      let results = await fetchFromRadioBrowser(path)
 
-      // Tier 2: Search by tag if name yielded no results
-      if (stations.length === 0) {
-        path = `/json/stations/bytag/${encodeURIComponent(clean)}?limit=30&hidebroken=true&order=votes&reverse=true`
-        stations = await fetchFromRadioBrowser(path)
+      if (results.length === 0) {
+        path = `/json/stations/bytag/${encodeURIComponent(clean)}?limit=35&hidebroken=true&order=votes&reverse=true`
+        results = await fetchFromRadioBrowser(path)
       }
 
-      radioStations.value = stations
-      if (stations.length === 0) {
+      stations.value = results
+      if (results.length === 0) {
         radioError.value = `No radio stations found for “${clean}”.`
+      } else {
+        void runBackgroundHealthCheck(results)
       }
-      return stations
+      return results
     } catch (err) {
       console.warn('[Pulse] Radio search failed:', err)
       radioError.value = navigator.onLine
@@ -346,22 +688,31 @@ export function useRadio() {
     }
   }
 
-  async function fetchRadioStations(force = false): Promise<PlayableTrack[]> {
+  async function fetchRadioStations(force = false): Promise<RadioStation[]> {
     if (currentRadioSearch.value) {
       return searchRadio(currentRadioSearch.value)
     }
-    return selectRadioCategory(activeRadioCategoryId.value, force)
+    return selectRegion(activeRegion.value, force)
   }
 
   return {
-    radioStations,
+    stations,
+    filteredStations,
     isLoadingRadio,
+    isCheckingHealth,
     radioError,
-    activeRadioCategoryId,
+    activeRegion,
+    activeCategory,
     currentRadioSearch,
+    regions: RADIO_REGIONS,
     categories: RADIO_CATEGORIES,
-    selectRadioCategory,
+    selectRegion,
+    selectCategory,
     searchRadio,
     fetchRadioStations,
+    getStationStatus,
+    getStationLatency,
+    getStationNetworkStrength,
+    runBackgroundHealthCheck,
   }
 }
