@@ -349,7 +349,6 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
     hlsInstance.attachMedia(video)
 
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-      isBuffering.value = false
       setChannelStatus(channel.id, 'online')
       const ping = Math.round(performance.now() - loadStartTime)
       if (ping > 0 && ping < 6000) {
@@ -431,7 +430,6 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
     video.addEventListener(
       'loadedmetadata',
       () => {
-        isBuffering.value = false
         setChannelStatus(channel.id, 'online')
         const ping = Math.round(performance.now() - loadStartTime)
         if (ping > 0 && ping < 6000) {
@@ -589,9 +587,18 @@ onBeforeUnmount(() => {
             >
               {{ channel.resolution }}
             </span>
+            <!-- Loading Indicator Pill -->
+            <span
+              v-if="isBuffering && !streamError"
+              class="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/25 px-2 py-0.5 text-[9px] font-bold text-indigo-300 ring-1 ring-indigo-400/40"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+              <span>Loading...</span>
+            </span>
+
             <!-- Signal Strength Pill -->
             <span
-              v-if="getChannelStatus(channel.id) === 'offline'"
+              v-else-if="getChannelStatus(channel.id) === 'offline'"
               class="inline-flex items-center gap-1 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 ring-1 ring-amber-500/20"
             >
               <SignalZero :size="10" class="text-amber-500/80" />
@@ -749,6 +756,7 @@ onBeforeUnmount(() => {
         playsinline
         webkit-playsinline
         preload="auto"
+        @loadstart="isBuffering = true"
         @waiting="isBuffering = true"
         @playing="onVideoPlaying"
         @pause="isPlayingVideo = false"
@@ -847,10 +855,14 @@ onBeforeUnmount(() => {
       <!-- Buffering Spinner Overlay -->
       <div
         v-if="isBuffering && !streamError"
-        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-xs"
+        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs z-10 animate-in fade-in duration-200"
       >
-        <div class="h-12 w-12 animate-spin rounded-full border-3 border-indigo-500 border-t-transparent shadow-lg"></div>
-        <p class="mt-3 text-xs font-semibold text-zinc-200 tracking-wide">Connecting live stream...</p>
+        <div class="relative flex items-center justify-center">
+          <div class="h-14 w-14 animate-spin rounded-full border-3 border-indigo-500/20 border-t-indigo-500 shadow-2xl"></div>
+          <Tv :size="20" class="absolute text-indigo-400 animate-pulse" />
+        </div>
+        <p class="mt-4 text-xs font-bold text-zinc-100 tracking-wide">Loading live stream...</p>
+        <p class="mt-1 text-[11px] text-zinc-400">Buffering real-time broadcast</p>
       </div>
 
       <!-- Stream Error Overlay with Auto-Skip -->

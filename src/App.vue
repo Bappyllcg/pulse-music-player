@@ -984,12 +984,23 @@ onBeforeUnmount(() => {
                   >
                     {{ getTvChannelLatency(ch.id) }}ms
                   </span>
+                  <span
+                    v-else
+                    class="flex items-center gap-1 text-[9px] text-zinc-400 font-medium"
+                  >
+                    <span class="h-1 w-1 rounded-full bg-indigo-400 animate-ping"></span>
+                    <span>Loading...</span>
+                  </span>
                 </div>
 
                 <div
                   class="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/15 transition group-hover:bg-rose-600 group-hover:text-white"
                 >
-                  <Play :size="14" fill="currentColor" class="translate-x-0.5" />
+                  <div
+                    v-if="activePlayingChannel?.id === ch.id"
+                    class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                  ></div>
+                  <Play v-else :size="14" fill="currentColor" class="translate-x-0.5" />
                 </div>
               </div>
             </div>
