@@ -32,11 +32,15 @@ import { useOnlineMusic } from './composables/useOnlineMusic'
 import { usePlayer } from './composables/usePlayer'
 import { useRadio, type RadioCategoryId, type RadioRegionId } from './composables/useRadio'
 import { useSleepTimer } from './composables/useSleepTimer'
+import { useTheme } from './composables/useTheme'
 import type { PlayableTrack } from './types/music'
 
 /* ------------------------------------------------------------------ */
 /* Composables & State                                                */
 /* ------------------------------------------------------------------ */
+
+const themeManager = useTheme()
+themeManager.initTheme()
 
 const storage = useAudioStorage()
 const player = usePlayer()
@@ -496,7 +500,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#09090b] text-zinc-100 antialiased select-none">
+  <div class="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#09090b] text-zinc-100 dark:bg-[#09090b] dark:text-zinc-100 app-viewport antialiased select-none">
     <!-- Hidden native file picker -->
     <input
       ref="fileInput"
@@ -518,7 +522,7 @@ onBeforeUnmount(() => {
     >
       <div
         v-if="notice"
-        class="fixed top-4 inset-x-4 z-50 mx-auto max-w-sm rounded-2xl bg-zinc-900/95 px-4 py-3 text-center text-xs font-semibold text-zinc-200 shadow-2xl ring-1 ring-white/10 backdrop-blur-md"
+        class="fixed top-4 inset-x-4 z-50 mx-auto max-w-sm rounded-2xl bg-white/95 text-zinc-900 shadow-2xl ring-1 ring-black/10 backdrop-blur-md dark:bg-zinc-900/95 dark:text-zinc-200 dark:ring-white/10 px-4 py-3 text-center text-xs font-semibold"
         role="status"
       >
         {{ notice }}
@@ -528,7 +532,7 @@ onBeforeUnmount(() => {
     <!-- Error Banner -->
     <div
       v-if="playbackError"
-      class="fixed top-16 inset-x-4 z-40 mx-auto max-w-sm rounded-2xl bg-red-950/90 px-4 py-3 text-center text-xs font-semibold text-red-200 shadow-xl ring-1 ring-red-500/30 backdrop-blur-md"
+      class="fixed top-16 inset-x-4 z-40 mx-auto max-w-sm rounded-2xl bg-rose-50 text-rose-800 ring-1 ring-rose-300 shadow-xl dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30 backdrop-blur-md px-4 py-3 text-center text-xs font-semibold"
     >
       {{ playbackError }}
     </div>

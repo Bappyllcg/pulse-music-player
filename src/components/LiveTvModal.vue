@@ -596,7 +596,7 @@ onBeforeUnmount(() => {
   <div
     v-if="channel"
     ref="playerContainerRef"
-    class="fixed inset-0 z-50 flex flex-col bg-black text-white select-none overflow-hidden"
+    class="live-tv-modal fixed inset-0 z-50 flex flex-col bg-black text-white select-none overflow-hidden"
     @mousemove="resetIdleTimer"
     @touchstart="resetIdleTimer"
   >

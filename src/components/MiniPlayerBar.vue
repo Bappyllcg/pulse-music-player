@@ -19,7 +19,7 @@ const emit = defineEmits<{
 <template>
   <div class="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-30">
     <div
-      class="relative flex flex-col overflow-hidden rounded-2xl bg-zinc-900/95 p-2 shadow-2xl ring-1 ring-white/15 backdrop-blur-xl transition active:scale-[0.99]"
+      class="mini-player-bar relative flex flex-col overflow-hidden rounded-2xl bg-zinc-900/95 p-2 shadow-2xl ring-1 ring-white/15 backdrop-blur-xl transition active:scale-[0.99]"
     >
       <!-- Top subtle progress stripe -->
       <div class="absolute inset-x-0 top-0 h-[2px] bg-zinc-800">
@@ -70,7 +70,7 @@ const emit = defineEmits<{
           <!-- Play / Pause in mini player -->
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90 hover:bg-zinc-100"
+            class="mini-player-play-btn flex h-10 w-10 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition active:scale-90 hover:bg-zinc-100"
             :aria-label="isPlaying ? 'Pause' : 'Play'"
             @click.stop="emit('togglePlay')"
           >

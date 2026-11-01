@@ -11,13 +11,27 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Pulse" />
     <meta name="theme-color" content="#09090b" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      try {
+        var t = localStorage.getItem('pulse:theme') || 'system';
+        var isDark = t === 'dark' || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (!isDark) {
+          document.documentElement.classList.add('light');
+          document.documentElement.setAttribute('data-theme', 'light');
+        } else {
+          document.documentElement.classList.add('dark');
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (e) {}
+    </script>
     <meta name="description" content="Pulse Player - an offline-first music player for your own audio files." />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="apple-touch-icon" href="./icon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     <title>Pulse Player</title>
   </head>
-  <body class="bg-zinc-950 text-zinc-100">
+  <body class="bg-[#09090b] text-zinc-100 dark:bg-[#09090b] dark:text-zinc-100">
     <div id="app"></div>
     <noscript>Pulse Player requires JavaScript.</noscript>
     <script type="module" src="/src/main.ts"></script>

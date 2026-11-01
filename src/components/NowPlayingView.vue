@@ -50,7 +50,7 @@ const emit = defineEmits<{
 
 <template>
   <div
-    class="flex h-full flex-col justify-between px-6 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
+    class="now-playing-view flex h-full flex-col justify-between px-6 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
   >
     <!-- Top Navigation Bar -->
     <header class="flex items-center justify-between py-2">
@@ -237,7 +237,7 @@ const emit = defineEmits<{
 
           <button
             type="button"
-            class="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.25)] ring-4 ring-white/15 transition-all duration-200 active:scale-95 hover:scale-105 hover:bg-zinc-100 focus:outline-none"
+            class="now-playing-play-btn relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.25)] ring-4 ring-white/15 transition-all duration-200 active:scale-95 hover:scale-105 hover:bg-zinc-100 focus:outline-none"
             :aria-label="isPlaying ? 'Pause' : 'Play'"
             @click="emit('togglePlay')"
           >
