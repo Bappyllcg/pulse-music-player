@@ -11,12 +11,10 @@ import {
   PictureInPicture,
   Play,
   RefreshCw,
-  Scan,
   SignalHigh,
   SignalLow,
   SignalMedium,
   SignalZero,
-  SlidersHorizontal,
   Tv,
   Volume2,
   VolumeX,
@@ -62,27 +60,11 @@ const zappingScroll = useHorizontalScroll(zappingGuideContainerRef)
 // Glassmorphic Player UI state
 const areControlsVisible = ref(true)
 let idleTimeout: number | undefined
+let lastTouchTime = 0
 const isMuted = ref(false)
 const volume = ref(1)
 let lastNonZeroVolume = 1
-
-// Aspect Ratio Modes: 'fit' | '16:9' | '4:3' | 'fill'
-export type AspectRatioMode = 'fit' | '16:9' | '4:3' | 'fill'
-const activeAspectRatio = ref<AspectRatioMode>('fit')
-const showAspectMenu = ref(false)
-
-// Multi-bitrate Quality Selection
-interface StreamQualityLevel {
-  index: number // -1 for Auto
-  name: string
-  bitrate: number
-  height: number
-  width: number
-}
-const qualityLevels = ref<StreamQualityLevel[]>([])
-const currentQualityIndex = ref<number>(-1)
-const showQualityMenu = ref(false)
-const activeBitrateText = ref('')
+const showChannelGuide = ref(true)
 
 // Telemetry & Stats HUD
 const showStatsHud = ref(false)
@@ -115,28 +97,6 @@ const countryInfo = computed(() => {
   return reg ? `${reg.flag} ${reg.label}` : 'Live TV'
 })
 
-const videoClass = computed(() => {
-  switch (activeAspectRatio.value) {
-    case '16:9':
-      return 'w-full h-full object-fill aspect-video'
-    case '4:3':
-      return 'h-full aspect-[4/3] object-fill mx-auto'
-    case 'fill':
-      return 'w-full h-full object-cover'
-    case 'fit':
-    default:
-      return 'w-full h-full object-contain'
-  }
-})
-
-const currentQualityLabel = computed(() => {
-  if (currentQualityIndex.value === -1) {
-    return activeBitrateText.value ? `Auto (${activeBitrateText.value})` : 'Auto'
-  }
-  const found = qualityLevels.value.find((q) => q.index === currentQualityIndex.value)
-  return found ? found.name : 'Auto'
-})
-
 // Auto-hiding control bar timer
 function resetIdleTimer(): void {
   areControlsVisible.value = true
@@ -144,11 +104,24 @@ function resetIdleTimer(): void {
     window.clearTimeout(idleTimeout)
     idleTimeout = undefined
   }
-  if (isPlayingVideo.value && !showQualityMenu.value && !showAspectMenu.value) {
+  if (isPlayingVideo.value) {
     idleTimeout = window.setTimeout(() => {
       areControlsVisible.value = false
     }, 3500)
   }
+}
+
+function onTouchStart(): void {
+  lastTouchTime = Date.now()
+}
+
+function onMouseMove(): void {
+  // Ignore synthetic mousemove events triggered by mobile touch taps
+  if (Date.now() - lastTouchTime < 600) return
+  if (!areControlsVisible.value) {
+    areControlsVisible.value = true
+  }
+  resetIdleTimer()
 }
 
 function cancelAutoSkip(): void {
@@ -243,20 +216,25 @@ function togglePlayPause(): void {
   }
 }
 
-function toggleControls(e?: MouseEvent | TouchEvent): void {
-  if (e) {
-    const target = e.target as HTMLElement | null
-    if (target?.closest('button') || target?.closest('input') || target?.closest('.menu-dropdown')) {
-      return
+function toggleControls(): void {
+  if (!areControlsVisible.value) {
+    areControlsVisible.value = true
+    resetIdleTimer()
+  } else {
+    areControlsVisible.value = false
+    if (idleTimeout) {
+      window.clearTimeout(idleTimeout)
+      idleTimeout = undefined
     }
   }
-  areControlsVisible.value = !areControlsVisible.value
-  if (areControlsVisible.value) {
-    resetIdleTimer()
-  } else if (idleTimeout) {
-    window.clearTimeout(idleTimeout)
-    idleTimeout = undefined
+}
+
+function handleStageClick(e: MouseEvent): void {
+  const target = e.target as HTMLElement | null
+  if (target?.closest('button') || target?.closest('input') || target?.closest('a')) {
+    return
   }
+  toggleControls()
 }
 
 function jumpToLiveEdge(): void {
@@ -267,20 +245,6 @@ function jumpToLiveEdge(): void {
       video.currentTime = video.seekable.end(video.seekable.length - 1)
     }
   } catch {}
-}
-
-function setAspectRatio(mode: AspectRatioMode): void {
-  activeAspectRatio.value = mode
-  showAspectMenu.value = false
-  resetIdleTimer()
-}
-
-function selectQuality(index: number): void {
-  if (!hlsInstance) return
-  hlsInstance.currentLevel = index
-  currentQualityIndex.value = index
-  showQualityMenu.value = false
-  resetIdleTimer()
 }
 
 function toggleMute(): void {
@@ -356,11 +320,6 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
   isBuffering.value = true
   isPlayingVideo.value = false
   streamError.value = null
-  qualityLevels.value = []
-  currentQualityIndex.value = -1
-  activeBitrateText.value = ''
-  showQualityMenu.value = false
-  showAspectMenu.value = false
   triggerZapBanner()
   resetIdleTimer()
 
@@ -406,31 +365,11 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
     hlsInstance.loadSource(streamUrl)
     hlsInstance.attachMedia(video)
 
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       setChannelStatus(channel.id, 'online')
       const ping = Math.round(performance.now() - loadStartTime)
       if (ping > 0 && ping < 6000) {
         setChannelLatency(channel.id, ping)
-      }
-
-      // Extract multi-bitrate quality levels
-      if (data.levels && data.levels.length > 0) {
-        const lvls: StreamQualityLevel[] = [
-          { index: -1, name: 'Auto', bitrate: 0, height: 0, width: 0 },
-        ]
-        data.levels.forEach((lvl, idx) => {
-          const height = lvl.height || 0
-          const width = lvl.width || 0
-          const name = height ? `${height}p` : lvl.name || `Quality ${idx + 1}`
-          lvls.push({
-            index: idx,
-            name,
-            bitrate: lvl.bitrate || 0,
-            height,
-            width,
-          })
-        })
-        qualityLevels.value = lvls
       }
 
       // Autoplay with safe muted fallback
@@ -444,9 +383,6 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
     hlsInstance.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
       if (hlsInstance && hlsInstance.levels[data.level]) {
         const lvl = hlsInstance.levels[data.level]
-        if (lvl.height) {
-          activeBitrateText.value = `${lvl.height}p`
-        }
         if (lvl.bitrate) {
           statsBitrate.value = `${Math.round(lvl.bitrate / 1000)} kbps`
         }
@@ -547,6 +483,11 @@ function scrollToActiveChannel(smooth = true): void {
 
 function handleSelectChannel(ch: TvChannel): void {
   if (zappingScroll.isDragClick()) return
+  // If controls are hidden, a tap should only reveal controls without switching channel
+  if (!areControlsVisible.value && isPlayingVideo.value && !streamError.value) {
+    toggleControls()
+    return
+  }
   emit('selectChannel', ch)
   scrollToActiveChannel(true)
 }
@@ -567,6 +508,14 @@ watch(areControlsVisible, (visible) => {
   if (visible) {
     setTimeout(() => {
       scrollToActiveChannel(false)
+    }, 60)
+  }
+})
+
+watch(showChannelGuide, (visible) => {
+  if (visible) {
+    setTimeout(() => {
+      scrollToActiveChannel(true)
     }, 60)
   }
 })
@@ -644,12 +593,7 @@ function togglePictureInPicture(): void {
 function onKeydown(e: KeyboardEvent): void {
   resetIdleTimer()
   if (e.key === 'Escape') {
-    if (showQualityMenu.value || showAspectMenu.value) {
-      showQualityMenu.value = false
-      showAspectMenu.value = false
-    } else {
-      emit('close')
-    }
+    emit('close')
   } else if (e.key === 'ArrowRight') {
     emit('next')
   } else if (e.key === 'ArrowLeft') {
@@ -663,6 +607,8 @@ function onKeydown(e: KeyboardEvent): void {
     toggleMute()
   } else if (e.key === 'd' || e.key === 'D') {
     showStatsHud.value = !showStatsHud.value
+  } else if (e.key === 'c' || e.key === 'C') {
+    showChannelGuide.value = !showChannelGuide.value
   }
 }
 
@@ -697,13 +643,16 @@ onBeforeUnmount(() => {
     v-if="channel"
     ref="playerContainerRef"
     class="live-tv-modal fixed inset-0 z-50 flex flex-col bg-black text-white select-none overflow-hidden"
-    @mousemove="resetIdleTimer"
-    @touchstart="resetIdleTimer"
+    @mousemove="onMouseMove"
+    @touchstart="onTouchStart"
   >
     <!-- Top Pro Glassmorphic Header -->
     <header
       class="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.6rem)] bg-gradient-to-b from-black/95 via-black/70 to-transparent transition-opacity duration-300"
-      :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
+      :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none invisible'"
+      @click.stop
+      @touchstart="resetIdleTimer"
+      @mousemove="resetIdleTimer"
     >
       <!-- Channel Identity -->
       <div class="flex items-center gap-3 min-w-0 flex-1 pr-3">
@@ -769,82 +718,10 @@ onBeforeUnmount(() => {
 
       <!-- Action & Setting Controls -->
       <div class="flex items-center gap-2 shrink-0">
-        <!-- Aspect Ratio Button -->
-        <div class="relative">
-          <button
-            type="button"
-            class="flex h-9 items-center gap-1.5 rounded-full bg-zinc-900/80 px-3 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800 active:scale-95 transition backdrop-blur-md"
-            title="Aspect Ratio"
-            @click.stop="showAspectMenu = !showAspectMenu; showQualityMenu = false"
-          >
-            <Scan :size="14" />
-            <span class="uppercase tracking-wider text-[11px]">{{ activeAspectRatio }}</span>
-          </button>
-
-          <!-- Aspect Ratio Dropdown Menu -->
-          <div
-            v-if="showAspectMenu"
-            class="absolute right-0 top-11 z-40 w-36 overflow-hidden rounded-2xl bg-zinc-900/95 p-1 text-xs shadow-2xl ring-1 ring-white/15 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
-          >
-            <p class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Aspect Ratio</p>
-            <button
-              v-for="opt in [
-                { id: 'fit', label: 'Fit (Original)' },
-                { id: '16:9', label: '16:9 Wide' },
-                { id: '4:3', label: '4:3 Classic TV' },
-                { id: 'fill', label: 'Fill / Zoom' },
-              ]"
-              :key="opt.id"
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left font-medium transition"
-              :class="activeAspectRatio === opt.id ? 'bg-indigo-600 text-white font-semibold' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'"
-              @click="setAspectRatio(opt.id as AspectRatioMode)"
-            >
-              <span>{{ opt.label }}</span>
-              <span v-if="activeAspectRatio === opt.id" class="text-[10px]">✓</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Multi-Bitrate Quality Selector -->
-        <div v-if="qualityLevels.length > 1" class="relative">
-          <button
-            type="button"
-            class="flex h-9 items-center gap-1.5 rounded-full bg-zinc-900/80 px-3 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800 active:scale-95 transition backdrop-blur-md"
-            title="Stream Quality"
-            @click.stop="showQualityMenu = !showQualityMenu; showAspectMenu = false"
-          >
-            <SlidersHorizontal :size="14" />
-            <span class="text-[11px]">{{ currentQualityLabel }}</span>
-          </button>
-
-          <!-- Quality Dropdown Menu -->
-          <div
-            v-if="showQualityMenu"
-            class="absolute right-0 top-11 z-40 w-44 max-h-64 overflow-y-auto rounded-2xl bg-zinc-900/95 p-1 text-xs shadow-2xl ring-1 ring-white/15 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 no-scrollbar"
-          >
-            <p class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Stream Quality</p>
-            <button
-              v-for="lvl in qualityLevels"
-              :key="lvl.index"
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left font-medium transition"
-              :class="currentQualityIndex === lvl.index ? 'bg-indigo-600 text-white font-semibold' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'"
-              @click="selectQuality(lvl.index)"
-            >
-              <span>{{ lvl.name }}</span>
-              <span v-if="lvl.bitrate" class="text-[10px] text-zinc-400">
-                {{ Math.round(lvl.bitrate / 1000) }}k
-              </span>
-              <span v-if="currentQualityIndex === lvl.index" class="text-[10px]">✓</span>
-            </button>
-          </div>
-        </div>
-
         <!-- Telemetry Stats HUD Button -->
         <button
           type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition backdrop-blur-md"
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition backdrop-blur-md cursor-pointer"
           :class="showStatsHud ? 'bg-indigo-600 text-white ring-indigo-500' : ''"
           title="Toggle Stream Diagnostics (Key: D)"
           @click="showStatsHud = !showStatsHud"
@@ -855,7 +732,7 @@ onBeforeUnmount(() => {
         <!-- Picture-in-Picture -->
         <button
           type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition backdrop-blur-md"
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition backdrop-blur-md cursor-pointer"
           title="Picture in Picture"
           @click="togglePictureInPicture"
         >
@@ -877,13 +754,13 @@ onBeforeUnmount(() => {
     <!-- Main Screen Stage Area -->
     <div
       class="relative flex-1 bg-black flex items-center justify-center overflow-hidden cursor-pointer"
-      @click="toggleControls"
+      @click="handleStageClick"
       @dblclick="toggleFullscreen"
     >
       <!-- HTML5 Video Component with Pro Engine Settings -->
       <video
         ref="videoRef"
-        :class="videoClass"
+        class="w-full h-full object-contain mx-auto pointer-events-none"
         autoplay
         playsinline
         webkit-playsinline
@@ -998,10 +875,6 @@ onBeforeUnmount(() => {
             <span class="text-zinc-500">Dropped:</span>
             <span>{{ statsDroppedFrames }} frames</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-zinc-500">Aspect Mode:</span>
-            <span class="uppercase text-indigo-300">{{ activeAspectRatio }}</span>
-          </div>
         </div>
       </div>
 
@@ -1064,7 +937,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="group absolute left-4 top-1/2 -translate-y-1/2 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/80 ring-1 ring-white/10 backdrop-blur-md transition hover:bg-black/90 hover:scale-105 hover:text-white active:scale-95 shadow-xl cursor-pointer"
-        :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
+        :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none invisible'"
         title="Previous Channel (Left Arrow)"
         @click.stop="emit('prev')"
       >
@@ -1074,7 +947,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="group absolute right-4 top-1/2 -translate-y-1/2 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/80 ring-1 ring-white/10 backdrop-blur-md transition hover:bg-black/90 hover:scale-105 hover:text-white active:scale-95 shadow-xl cursor-pointer"
-        :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
+        :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none invisible'"
         title="Next Channel (Right Arrow)"
         @click.stop="emit('next')"
       >
@@ -1084,17 +957,122 @@ onBeforeUnmount(() => {
 
     <!-- Unified Bottom Control & Zapping Stack -->
     <div
-      class="absolute bottom-0 inset-x-0 z-30 flex flex-col pointer-events-none transition-all duration-300"
-      :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'"
+      class="absolute bottom-0 inset-x-0 z-30 flex flex-col transition-all duration-300"
+      :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none invisible'"
       @click.stop
+      @touchstart="resetIdleTimer"
+      @mousemove="resetIdleTimer"
     >
-      <!-- 1. Player Cinema Controls Bar -->
-      <div
-        class="bg-gradient-to-t from-black/95 via-black/85 to-transparent px-4 pt-6 backdrop-blur-md transition-all duration-300"
-        :class="channels.length <= 1 ? 'pb-4' : 'pb-2.5'"
-        :style="channels.length <= 1 ? 'padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);' : ''"
+      <!-- 1. Channel Zapping Bar: Elevated safely ABOVE the bottom controls, zero conflict with phone home bar -->
+      <transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 translate-y-3 scale-98"
+        enter-to-class="opacity-100 translate-y-0 scale-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 translate-y-0 scale-100"
+        leave-to-class="opacity-0 translate-y-3 scale-98"
       >
-        <div class="flex items-center justify-between gap-3">
+        <div
+          v-if="channels.length > 1 && showChannelGuide"
+          class="mx-3 mb-2 max-w-4xl sm:mx-auto w-[calc(100%-1.5rem)] rounded-2xl border border-white/10 bg-zinc-950/85 px-3.5 py-2.5 backdrop-blur-xl shadow-2xl transition-all duration-300"
+        >
+          <div class="mb-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
+                Channels
+              </span>
+              <span class="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-zinc-400">
+                {{ channels.length }}
+              </span>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                :disabled="!zappingScroll.canScrollLeft.value"
+                class="flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+                aria-label="Scroll channels left"
+                @click="zappingScroll.scrollLeft()"
+              >
+                <ChevronLeft :size="13" />
+              </button>
+              <button
+                type="button"
+                :disabled="!zappingScroll.canScrollRight.value"
+                class="flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+                aria-label="Scroll channels right"
+                @click="zappingScroll.scrollRight()"
+              >
+                <ChevronRight :size="13" />
+              </button>
+              <button
+                type="button"
+                class="flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer ml-1"
+                title="Hide Channel Bar (C)"
+                @click="showChannelGuide = false"
+              >
+                <X :size="13" />
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref="zappingGuideContainerRef"
+            class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth select-none cursor-grab active:cursor-grabbing"
+          >
+            <button
+              v-for="ch in channels"
+              :key="ch.id"
+              :data-channel-id="ch.id"
+              type="button"
+              class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer"
+              :class="
+                ch.id === channel.id
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/40 ring-1 ring-white/20'
+                  : 'bg-zinc-900/90 text-zinc-300 ring-1 ring-white/5 hover:bg-zinc-800 hover:text-white'
+              "
+              @click="handleSelectChannel(ch)"
+            >
+              <img
+                v-if="ch.logo"
+                :src="ch.logo"
+                :alt="ch.cleanName"
+                class="h-4 w-4 object-contain rounded"
+                @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
+              />
+              <span class="truncate max-w-[120px]">{{ ch.cleanName }}</span>
+              <span
+                v-if="getChannelStatus(ch.id) === 'offline'"
+                class="flex items-center gap-1 rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-amber-400/90 ring-1 ring-amber-500/20"
+              >
+                <SignalZero :size="9" />
+                <span>Off</span>
+              </span>
+              <span
+                v-else
+                class="flex items-center gap-1"
+              >
+                <SignalHigh v-if="getChannelNetworkStrength(ch.id) === 'excellent'" :size="10" class="text-emerald-400" />
+                <SignalMedium v-else-if="getChannelNetworkStrength(ch.id) === 'good'" :size="10" class="text-teal-400" />
+                <SignalLow v-else-if="getChannelNetworkStrength(ch.id) === 'fair' || getChannelNetworkStrength(ch.id) === 'poor'" :size="10" class="text-amber-400" />
+                <span
+                  v-if="ch.resolution"
+                  class="rounded bg-black/40 px-1 py-0.2 text-[8px] font-bold text-zinc-300"
+                >
+                  {{ ch.resolution }}
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 2. Player Cinema Controls Bar: Docked to bottom with phone home-indicator safe padding -->
+      <div
+        class="bg-gradient-to-t from-black via-black/85 to-transparent px-4 pt-3 backdrop-blur-md transition-all duration-300"
+        :style="'padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);'"
+      >
+        <div class="flex items-center justify-between gap-3 max-w-4xl mx-auto">
           <!-- Playback & Live Sync Controls -->
           <div class="flex items-center gap-2.5">
             <!-- Play / Pause -->
@@ -1142,8 +1120,23 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- Right Controls: Fullscreen only (No duplicate Aspect Ratio or Quality) -->
+          <!-- Right Controls: Channel Strip Toggle & Fullscreen -->
           <div class="flex items-center gap-2">
+            <!-- Channels Quick-Zap Toggle Button -->
+            <button
+              v-if="channels.length > 1"
+              type="button"
+              class="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ring-1 transition cursor-pointer active:scale-95"
+              :class="showChannelGuide ? 'bg-indigo-600 text-white ring-indigo-500 shadow-md shadow-indigo-600/30' : 'bg-zinc-900/80 text-zinc-300 ring-white/10 hover:text-white hover:bg-zinc-800'"
+              :title="showChannelGuide ? 'Hide Channels (C)' : 'Show Channels (C)'"
+              @click="showChannelGuide = !showChannelGuide"
+            >
+              <Tv :size="14" />
+              <span class="hidden xs:inline">Channels</span>
+              <span class="rounded bg-white/20 px-1 py-0.2 text-[10px] font-mono">{{ channels.length }}</span>
+            </button>
+
+            <!-- Fullscreen -->
             <button
               type="button"
               class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition cursor-pointer"
@@ -1154,89 +1147,6 @@ onBeforeUnmount(() => {
               <Maximize v-else :size="16" />
             </button>
           </div>
-        </div>
-      </div>
-
-      <!-- 2. Bottom Channel Zapping Bar: Grounded on bottom edge with zero extra space -->
-      <div
-        v-if="channels.length > 1"
-        class="pointer-events-auto border-t border-white/10 bg-zinc-950/98 px-4 pt-2 backdrop-blur-xl transition-all duration-300"
-        style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);"
-      >
-        <div class="mb-1.5 flex items-center justify-between">
-          <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-            Channels ({{ channels.length }})
-          </span>
-          <div class="flex items-center gap-1.5">
-            <button
-              type="button"
-              :disabled="!zappingScroll.canScrollLeft.value"
-              class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
-              aria-label="Scroll channels left"
-              @click="zappingScroll.scrollLeft()"
-            >
-              <ChevronLeft :size="12" />
-            </button>
-            <button
-              type="button"
-              :disabled="!zappingScroll.canScrollRight.value"
-              class="flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
-              aria-label="Scroll channels right"
-              @click="zappingScroll.scrollRight()"
-            >
-              <ChevronRight :size="12" />
-            </button>
-            <span class="text-[11px] text-zinc-500 ml-1">Tap channel to watch</span>
-          </div>
-        </div>
-
-        <div
-          ref="zappingGuideContainerRef"
-          class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth select-none cursor-grab active:cursor-grabbing"
-        >
-          <button
-            v-for="ch in channels"
-            :key="ch.id"
-            :data-channel-id="ch.id"
-            type="button"
-            class="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer"
-            :class="
-              ch.id === channel.id
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/40 ring-1 ring-white/20'
-                : 'bg-zinc-900/90 text-zinc-300 ring-1 ring-white/5 hover:bg-zinc-800 hover:text-white'
-            "
-            @click="handleSelectChannel(ch)"
-          >
-            <img
-              v-if="ch.logo"
-              :src="ch.logo"
-              :alt="ch.cleanName"
-              class="h-4 w-4 object-contain rounded"
-              @error="(e) => ((e.target as HTMLElement).style.display = 'none')"
-            />
-            <span class="truncate max-w-[120px]">{{ ch.cleanName }}</span>
-            <span
-              v-if="getChannelStatus(ch.id) === 'offline'"
-              class="flex items-center gap-1 rounded bg-zinc-900/90 px-1.5 py-0.5 text-[8px] font-bold uppercase text-amber-400/90 ring-1 ring-amber-500/20"
-            >
-              <SignalZero :size="9" />
-              <span>Off</span>
-            </span>
-            <span
-              v-else
-              class="flex items-center gap-1"
-            >
-              <SignalHigh v-if="getChannelNetworkStrength(ch.id) === 'excellent'" :size="10" class="text-emerald-400" />
-              <SignalMedium v-else-if="getChannelNetworkStrength(ch.id) === 'good'" :size="10" class="text-teal-400" />
-              <SignalLow v-else-if="getChannelNetworkStrength(ch.id) === 'fair' || getChannelNetworkStrength(ch.id) === 'poor'" :size="10" class="text-amber-400" />
-              <span
-                v-if="ch.resolution"
-                class="rounded bg-black/40 px-1 py-0.2 text-[8px] font-bold text-zinc-300"
-              >
-                {{ ch.resolution }}
-              </span>
-            </span>
-          </button>
         </div>
       </div>
     </div>
