@@ -655,7 +655,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 app-viewport antialiased select-none font-sans">
+  <div class="fixed inset-0 flex h-full w-full flex-col overflow-hidden bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 app-viewport antialiased select-none font-sans">
     <!-- Hidden native file picker -->
     <input
       ref="fileInput"
@@ -699,7 +699,7 @@ onBeforeUnmount(() => {
     <!-- ============================================================== -->
     <div
       v-show="activeTab === 'library'"
-      class="flex h-full flex-col overflow-hidden"
+      class="relative flex h-full flex-col overflow-hidden"
     >
       <!-- Top App Bar with Branding and Status -->
       <header class="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-3 shrink-0">
@@ -767,8 +767,8 @@ onBeforeUnmount(() => {
         class="flex-1 overflow-y-auto px-5"
         :class="[
           currentTrack && activeMainTab !== 'tv' && !activePlayingChannel
-            ? 'pb-32'
-            : 'pb-16'
+            ? 'pb-24'
+            : 'pb-4'
         ]"
       >
         <!-- 1. Library Pillar -->

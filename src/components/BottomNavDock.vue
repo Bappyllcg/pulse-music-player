@@ -28,13 +28,13 @@ const navItems: NavItem[] = [
 
 <template>
   <nav
-    class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#0c0c14]/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)] select-none"
+    class="relative z-30 shrink-0 w-full border-t border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#0c0c14]/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)] select-none"
     role="tablist"
     aria-label="Main entertainment navigation"
   >
     <div
       class="max-w-md mx-auto flex items-center justify-around gap-1 px-3 pt-1"
-      style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 4px);"
+      style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);"
     >
       <button
         v-for="item in navItems"

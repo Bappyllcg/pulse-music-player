@@ -56,7 +56,6 @@ const isBuffering = ref(true)
 const isPlayingVideo = ref(false)
 const streamError = ref<string | null>(null)
 const isFullscreen = ref(false)
-const showChannelDrawer = ref(true)
 const zappingGuideContainerRef = ref<HTMLDivElement | null>(null)
 const zappingScroll = useHorizontalScroll(zappingGuideContainerRef)
 
@@ -564,10 +563,10 @@ watch(
   },
 )
 
-watch(showChannelDrawer, (isOpen) => {
-  if (isOpen) {
+watch(areControlsVisible, (visible) => {
+  if (visible) {
     setTimeout(() => {
-      scrollToActiveChannel(true)
+      scrollToActiveChannel(false)
     }, 60)
   }
 })
@@ -863,17 +862,6 @@ onBeforeUnmount(() => {
           <PictureInPicture :size="16" />
         </button>
 
-        <!-- Fullscreen -->
-        <button
-          type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition backdrop-blur-md"
-          :title="isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'"
-          @click="toggleFullscreen"
-        >
-          <Minimize v-if="isFullscreen" :size="16" />
-          <Maximize v-else :size="16" />
-        </button>
-
         <!-- Close Player -->
         <button
           type="button"
@@ -1096,13 +1084,15 @@ onBeforeUnmount(() => {
 
     <!-- Unified Bottom Control & Zapping Stack -->
     <div
-      class="absolute bottom-0 inset-x-0 z-30 flex flex-col pointer-events-none"
+      class="absolute bottom-0 inset-x-0 z-30 flex flex-col pointer-events-none transition-all duration-300"
+      :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'"
       @click.stop
     >
-      <!-- 1. Player Cinema Controls Bar (Directly Above Zapping Guide) -->
+      <!-- 1. Player Cinema Controls Bar -->
       <div
-        class="pointer-events-auto transition-all duration-300 bg-gradient-to-t from-black/95 via-black/85 to-transparent px-4 pb-2.5 pt-6 backdrop-blur-md"
-        :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-3 pointer-events-none'"
+        class="bg-gradient-to-t from-black/95 via-black/85 to-transparent px-4 pt-6 backdrop-blur-md transition-all duration-300"
+        :class="channels.length <= 1 ? 'pb-4' : 'pb-2.5'"
+        :style="channels.length <= 1 ? 'padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);' : ''"
       >
         <div class="flex items-center justify-between gap-3">
           <!-- Playback & Live Sync Controls -->
@@ -1152,55 +1142,16 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- Right Controls: Drawer Toggle, Quality, Aspect, Fullscreen -->
-          <div class="flex items-center gap-1.5">
-            <!-- Channel Zapping Drawer Toggle Button -->
-            <button
-              v-if="channels.length > 1"
-              type="button"
-              class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition active:scale-95 cursor-pointer"
-              :class="showChannelDrawer ? 'bg-indigo-600 text-white ring-indigo-500 font-bold shadow-md shadow-indigo-600/30' : 'bg-zinc-800/80 text-zinc-300 ring-white/10 hover:bg-zinc-700 hover:text-white'"
-              @click="showChannelDrawer = !showChannelDrawer"
-            >
-              <Tv :size="13" />
-              <span>Channels ({{ channels.length }})</span>
-            </button>
-
-            <!-- Aspect Ratio Selector (visible on sm+) -->
-            <div class="relative hidden sm:block">
-              <button
-                type="button"
-                class="flex h-8 items-center gap-1 rounded-full bg-zinc-900/80 px-2.5 text-xs font-semibold text-zinc-300 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800 active:scale-95 transition cursor-pointer"
-                title="Aspect Ratio"
-                @click.stop="showAspectMenu = !showAspectMenu; showQualityMenu = false"
-              >
-                <Scan :size="13" />
-                <span class="text-[11px] uppercase">{{ activeAspectRatio }}</span>
-              </button>
-            </div>
-
-            <!-- Multi-Bitrate Quality Selector -->
-            <div v-if="qualityLevels.length > 1" class="relative">
-              <button
-                type="button"
-                class="flex h-8 items-center gap-1 rounded-full bg-zinc-900/80 px-2.5 text-xs font-semibold text-zinc-200 ring-1 ring-white/10 hover:text-white hover:bg-zinc-800 active:scale-95 transition cursor-pointer"
-                title="Stream Quality"
-                @click.stop="showQualityMenu = !showQualityMenu; showAspectMenu = false"
-              >
-                <SlidersHorizontal :size="12" />
-                <span class="text-[11px]">{{ currentQualityLabel }}</span>
-              </button>
-            </div>
-
-            <!-- Fullscreen -->
+          <!-- Right Controls: Fullscreen only (No duplicate Aspect Ratio or Quality) -->
+          <div class="flex items-center gap-2">
             <button
               type="button"
-              class="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition cursor-pointer"
+              class="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-300 ring-1 ring-white/10 hover:text-white active:scale-95 transition cursor-pointer"
               :title="isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'"
               @click="toggleFullscreen"
             >
-              <Minimize v-if="isFullscreen" :size="15" />
-              <Maximize v-else :size="15" />
+              <Minimize v-if="isFullscreen" :size="16" />
+              <Maximize v-else :size="16" />
             </button>
           </div>
         </div>
@@ -1208,13 +1159,13 @@ onBeforeUnmount(() => {
 
       <!-- 2. Bottom Channel Zapping Bar: Grounded on bottom edge with zero extra space -->
       <div
-        v-if="showChannelDrawer && channels.length > 1"
+        v-if="channels.length > 1"
         class="pointer-events-auto border-t border-white/10 bg-zinc-950/98 px-4 pt-2 backdrop-blur-xl transition-all duration-300"
         style="padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);"
       >
         <div class="mb-1.5 flex items-center justify-between">
           <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-            Zapping Guide ({{ channels.length }})
+            Channels ({{ channels.length }})
           </span>
           <div class="flex items-center gap-1.5">
             <button
