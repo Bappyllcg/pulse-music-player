@@ -1,58 +1,59 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-    />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Pulse" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f4f8" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08080c" />
-    <meta name="theme-color" content="#08080c" />
-    <meta name="color-scheme" content="light dark" />
-    <style>
-      html, body {
-        background-color: #08080c;
-        margin: 0;
-        padding: 0;
-      }
-      html.light, html.light body {
-        background-color: #f4f4f8;
-      }
-    </style>
-    <script>
-      try {
-        var t = localStorage.getItem('pulse:theme') || 'system';
-        var isDark = t === 'dark' || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (!isDark) {
-          document.documentElement.classList.add('light');
-          document.documentElement.setAttribute('data-theme', 'light');
-        } else {
-          document.documentElement.classList.add('dark');
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
-      } catch (e) {}
-    </script>
-    <meta name="description" content="Pulse Player - an offline-first music player for your own audio files." />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <title>Pulse Player</title>
-  </head>
-  <body class="bg-slate-50 text-slate-900 dark:bg-[#08080c] dark:text-zinc-100">
-    <div id="app"></div>
-    <noscript>Pulse Player requires JavaScript.</noscript>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
 
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Pulse" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f4f8" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08080c" />
+  <meta name="theme-color" content="#08080c" />
+  <meta name="color-scheme" content="light dark" />
+  <style>
+    html,
+    body {
+      background-color: #08080c;
+      margin: 0;
+      padding: 0;
+    }
+
+    html.light,
+    html.light body {
+      background-color: #f4f4f8;
+    }
+  </style>
+  <script>
+    try {
+      var t = localStorage.getItem('pulse:theme') || 'system';
+      var isDark = t === 'dark' || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (!isDark) {
+        document.documentElement.classList.add('light');
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    } catch (e) { }
+  </script>
+  <meta name="description" content="Pulse Player - an offline-first music player for your own audio files." />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+  <title>Pulse Player</title>
+</head>
+
+<body class="bg-slate-50 text-slate-900 dark:bg-[#08080c] dark:text-zinc-100">
+  <div id="app"></div>
+  <noscript>Pulse Player requires JavaScript.</noscript>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
