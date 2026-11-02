@@ -170,40 +170,54 @@ function onDrop(e: DragEvent): void {
     </div>
 
     <!-- Segmented Filter Control: All | Liked | Recent -->
-    <div class="flex items-center justify-between pt-1">
-      <div class="inline-flex rounded-full p-1 backdrop-blur-md border
+    <div class="flex items-center justify-between gap-3 pt-1">
+      <div
+        class="grid grid-cols-3 w-full sm:w-auto sm:inline-flex rounded-full p-1 backdrop-blur-md border
                bg-slate-200/70 border-slate-300/50 shadow-inner
-               dark:bg-zinc-900/80 dark:border-white/10">
-        <button type="button"
-          class="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer"
-          :class="selectedFilter === 'all'
-            ? 'btn-primary-white bg-indigo-600 shadow-md shadow-indigo-600/30'
-            : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
-            " @click="emit('selectFilter', 'all')">
+               dark:bg-zinc-900/80 dark:border-white/10"
+      >
+        <button
+          type="button"
+          class="flex items-center justify-center gap-1.5 rounded-full px-3.5 sm:px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap"
+          :class="
+            selectedFilter === 'all'
+              ? 'btn-primary-white bg-indigo-600 shadow-md shadow-indigo-600/30'
+              : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
+          "
+          @click="emit('selectFilter', 'all')"
+        >
           <span>All Songs</span>
         </button>
 
-        <button type="button"
-          class="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer"
-          :class="selectedFilter === 'liked'
-            ? 'btn-primary-white bg-rose-600 shadow-md shadow-rose-600/30'
-            : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
-            " @click="emit('selectFilter', 'liked')">
+        <button
+          type="button"
+          class="flex items-center justify-center gap-1.5 rounded-full px-3.5 sm:px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap"
+          :class="
+            selectedFilter === 'liked'
+              ? 'btn-primary-white bg-rose-600 shadow-md shadow-rose-600/30'
+              : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
+          "
+          @click="emit('selectFilter', 'liked')"
+        >
           <Heart :size="12" :fill="selectedFilter === 'liked' ? 'currentColor' : 'none'" />
           <span>Favorites</span>
         </button>
 
-        <button type="button"
-          class="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer"
-          :class="selectedFilter === 'recent'
-            ? 'btn-primary-white bg-indigo-600 shadow-md shadow-indigo-600/30'
-            : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
-            " @click="emit('selectFilter', 'recent')">
+        <button
+          type="button"
+          class="flex items-center justify-center gap-1.5 rounded-full px-3.5 sm:px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap"
+          :class="
+            selectedFilter === 'recent'
+              ? 'btn-primary-white bg-indigo-600 shadow-md shadow-indigo-600/30'
+              : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
+          "
+          @click="emit('selectFilter', 'recent')"
+        >
           <span>Recent</span>
         </button>
       </div>
 
-      <span class="text-xs font-medium text-slate-500 dark:text-zinc-400 tabular-nums">
+      <span class="hidden sm:inline-block text-xs font-medium text-slate-500 dark:text-zinc-400 tabular-nums shrink-0">
         {{ tracks.length }} {{ tracks.length === 1 ? 'track' : 'tracks' }}
       </span>
     </div>
