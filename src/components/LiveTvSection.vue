@@ -93,49 +93,62 @@ function toggleCountryGrid() {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <!-- Live TV Hero Banner -->
+  <div class="space-y-3">
+    <!-- Compact Live TV Toolbar Card -->
     <div
-      class="relative overflow-hidden rounded-3xl p-5 shadow-lg backdrop-blur-xl transition-all border
-             bg-gradient-to-br from-amber-50/90 via-white to-orange-50/60 border-amber-100/90 shadow-amber-100/40
-             dark:bg-gradient-to-br dark:from-[#281608]/95 dark:via-[#161006]/95 dark:to-[#08080c]/95 dark:border-white/10 dark:shadow-2xl"
+      class="relative overflow-hidden rounded-2xl p-3 sm:p-3.5 shadow-sm backdrop-blur-xl transition-all border
+             bg-gradient-to-r from-amber-50/70 via-white to-orange-50/40 border-amber-100/90 shadow-amber-100/20
+             dark:bg-gradient-to-r dark:from-[#221307]/90 dark:via-[#140f09]/90 dark:to-[#08080c]/90 dark:border-white/10 dark:shadow-none"
     >
-      <div class="pointer-events-none absolute -right-6 -bottom-6 h-36 w-36 rounded-full bg-amber-500/15 dark:bg-amber-600/20 blur-2xl"></div>
-
-      <div class="relative z-10 flex items-center justify-between">
-        <div>
-          <div class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-400">
-            <span class="relative flex h-2 w-2">
-              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
-              <span class="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
-            </span>
-            <span>HLS.js Cinema Stream</span>
+      <!-- Header Row: Title, Live indicator & Refresh -->
+      <div class="relative z-10 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl
+                   bg-amber-100 text-amber-700 border border-amber-200/80 shadow-2xs
+                   dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30"
+          >
+            <Tv :size="15" />
           </div>
-
-          <h2 class="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            Live Television
-          </h2>
-          <p class="mt-0.5 text-xs text-slate-500 dark:text-zinc-300">
-            20+ priority nations, news, sports & cinema broadcasts
-          </p>
+          <div class="min-w-0">
+            <div class="flex items-baseline gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                Live Television
+              </h2>
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider
+                           bg-amber-100/90 text-amber-800 border border-amber-200/70
+                           dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30 whitespace-nowrap">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                  <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                </span>
+                Cinema Stream
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div
-          class="flex h-12 w-12 items-center justify-center rounded-2xl
-                 bg-amber-100/90 text-amber-700 border border-amber-200/80 shadow-sm
-                 dark:bg-amber-600/30 dark:text-amber-400 dark:border-amber-500/30 dark:shadow-inner"
+        <button
+          type="button"
+          class="flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-semibold transition active:scale-95 cursor-pointer
+                 bg-white text-slate-700 border border-slate-200/90 shadow-2xs hover:bg-slate-50 hover:text-slate-900
+                 dark:bg-zinc-800/90 dark:text-zinc-200 dark:border-white/10 dark:hover:bg-zinc-700 dark:hover:text-white shrink-0"
+          title="Refresh TV channels"
+          :disabled="isLoading"
+          @click="emit('refresh')"
         >
-          <Tv :size="24" />
-        </div>
+          <RefreshCw :size="12" :class="{ 'animate-spin': isLoading }" />
+          <span class="hidden sm:inline">Refresh</span>
+        </button>
       </div>
 
       <!-- TV Channel Search Bar -->
       <div
-        class="mt-4 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 backdrop-blur-md transition
-               bg-white border border-slate-200/90 shadow-sm focus-within:ring-2 focus-within:ring-amber-500/30 focus-within:border-amber-500
-               dark:bg-black/40 dark:border-white/15 dark:focus-within:ring-amber-500 dark:focus-within:border-amber-500"
+        class="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-1.5 backdrop-blur-md transition
+               bg-white/90 border border-slate-200/90 shadow-2xs focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20
+               dark:bg-black/40 dark:border-white/10 dark:focus-within:border-amber-500 dark:focus-within:ring-2 dark:focus-within:ring-amber-500/30 dark:focus-within:bg-black/60"
       >
-        <Search :size="15" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
+        <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
           :value="searchQuery"
           type="search"
@@ -146,153 +159,148 @@ function toggleCountryGrid() {
         <button
           v-if="searchQuery"
           type="button"
-          class="shrink-0 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white transition active:scale-90 cursor-pointer"
+          class="shrink-0 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white transition active:scale-90 cursor-pointer p-0.5"
           aria-label="Clear TV search"
           @click="emit('update:searchQuery', '')"
         >
-          <X :size="14" />
+          <X :size="13" />
         </button>
       </div>
+    </div>
 
-      <!-- Country / Region Section inside Hero -->
-      <div class="mt-4 pt-2.5 border-t border-slate-200/70 dark:border-white/[0.08]">
-        <div class="mb-2 flex items-center justify-between">
-          <div class="flex items-center gap-1.5">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
-              Select Country
-            </span>
-            <span class="rounded-full bg-amber-100/90 dark:bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30">
-              {{ regions.length }}
-            </span>
-          </div>
-
-          <!-- Carousel Controls & View All Toggle -->
-          <div class="flex items-center gap-1">
-            <!-- Left / Right scroll nudges (only visible when not in grid mode) -->
-            <template v-if="!isCountryGridExpanded">
-              <button
-                type="button"
-                :disabled="!countryScroll.canScrollLeft.value"
-                class="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
-                title="Scroll left"
-                aria-label="Scroll countries left"
-                @click="countryScroll.scrollLeft()"
-              >
-                <ChevronLeft :size="14" />
-              </button>
-              <button
-                type="button"
-                :disabled="!countryScroll.canScrollRight.value"
-                class="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
-                title="Scroll right"
-                aria-label="Scroll countries right"
-                @click="countryScroll.scrollRight()"
-              >
-                <ChevronRight :size="14" />
-              </button>
-            </template>
-
-            <!-- View All / Collapse toggle button -->
-            <button
-              type="button"
-              class="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition active:scale-95 cursor-pointer
-                     bg-white/85 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/90 shadow-2xs
-                     dark:bg-white/[0.08] dark:hover:bg-white/[0.14] dark:text-zinc-200 dark:border-white/10 dark:hover:text-white"
-              :class="{ 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-500/40': isCountryGridExpanded }"
-              @click="toggleCountryGrid"
-            >
-              <Grid :size="11" />
-              <span>{{ isCountryGridExpanded ? 'Collapse' : `All (${regions.length})` }}</span>
-              <ChevronUp v-if="isCountryGridExpanded" :size="12" />
-              <ChevronDown v-else :size="12" />
-            </button>
-          </div>
+    <!-- Country / Region Filter Section -->
+    <div>
+      <div class="mb-1.5 flex items-center justify-between px-1">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+            Select Country
+          </span>
+          <span class="rounded-full bg-amber-100/90 dark:bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30">
+            {{ regions.length }}
+          </span>
         </div>
 
-        <!-- Mode A: Horizontal Carousel with Edge Fades -->
-        <div v-if="!isCountryGridExpanded" class="relative group/carousel">
-          <!-- Left Edge Fade Indicator -->
-          <div
-            class="pointer-events-none absolute left-0 inset-y-0 w-6 z-10 bg-gradient-to-r from-amber-50/90 dark:from-[#211206] to-transparent transition-opacity duration-200"
-            :class="countryScroll.canScrollLeft.value ? 'opacity-100' : 'opacity-0'"
-          ></div>
-
-          <!-- Carousel Container -->
-          <div
-            ref="countryScrollRef"
-            class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 scroll-smooth select-none cursor-grab active:cursor-grabbing"
-          >
+        <!-- Carousel Controls & View All Toggle -->
+        <div class="flex items-center gap-1">
+          <template v-if="!isCountryGridExpanded">
             <button
-              v-for="reg in regions"
-              :key="reg.id"
-              :data-active="activeRegion === reg.id"
               type="button"
-              class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
-              :class="
-                activeRegion === reg.id
-                  ? 'bg-gradient-to-r from-amber-600 to-amber-500 !text-white shadow-md shadow-amber-600/30 border-amber-500 font-bold'
-                  : 'bg-white text-slate-700 border-slate-200 shadow-xs hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 dark:bg-white/[0.08] dark:text-zinc-200 dark:border-white/10 dark:hover:text-white dark:hover:bg-white/[0.14]'
-              "
-              @click="handleSelectRegion(reg.id)"
+              :disabled="!countryScroll.canScrollLeft.value"
+              class="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+              title="Scroll left"
+              aria-label="Scroll countries left"
+              @click="countryScroll.scrollLeft()"
             >
-              <span>{{ reg.flag }}</span>
-              <span>{{ reg.label }}</span>
+              <ChevronLeft :size="14" />
             </button>
-          </div>
+            <button
+              type="button"
+              :disabled="!countryScroll.canScrollRight.value"
+              class="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 disabled:opacity-20 disabled:pointer-events-none transition cursor-pointer"
+              title="Scroll right"
+              aria-label="Scroll countries right"
+              @click="countryScroll.scrollRight()"
+            >
+              <ChevronRight :size="14" />
+            </button>
+          </template>
 
-          <!-- Right Edge Fade Indicator -->
-          <div
-            class="pointer-events-none absolute right-0 inset-y-0 w-6 z-10 bg-gradient-to-l from-amber-50/90 dark:from-[#140e06] to-transparent transition-opacity duration-200"
-            :class="countryScroll.canScrollRight.value ? 'opacity-100' : 'opacity-0'"
-          ></div>
+          <button
+            type="button"
+            class="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition active:scale-95 cursor-pointer
+                   bg-white/85 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/90 shadow-2xs
+                   dark:bg-white/[0.08] dark:hover:bg-white/[0.14] dark:text-zinc-200 dark:border-white/10 dark:hover:text-white"
+            :class="{ 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-500/40': isCountryGridExpanded }"
+            @click="toggleCountryGrid"
+          >
+            <Grid :size="11" />
+            <span>{{ isCountryGridExpanded ? 'Collapse' : `All (${regions.length})` }}</span>
+            <ChevronUp v-if="isCountryGridExpanded" :size="12" />
+            <ChevronDown v-else :size="12" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode A: Horizontal Carousel with Edge Fades -->
+      <div v-if="!isCountryGridExpanded" class="relative group/carousel">
+        <div
+          class="pointer-events-none absolute left-0 inset-y-0 w-6 z-10 bg-gradient-to-r from-slate-50 dark:from-[#08080c] to-transparent transition-opacity duration-200"
+          :class="countryScroll.canScrollLeft.value ? 'opacity-100' : 'opacity-0'"
+        ></div>
+
+        <div
+          ref="countryScrollRef"
+          class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 scroll-smooth select-none cursor-grab active:cursor-grabbing"
+        >
+          <button
+            v-for="reg in regions"
+            :key="reg.id"
+            :data-active="activeRegion === reg.id"
+            type="button"
+            class="flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
+            :class="
+              activeRegion === reg.id
+                ? 'bg-gradient-to-r from-amber-600 to-amber-500 !text-white shadow-md shadow-amber-600/30 border-amber-500 font-bold'
+                : 'bg-white text-slate-700 border-slate-200 shadow-xs hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 dark:bg-zinc-900/80 dark:text-zinc-200 dark:border-white/10 dark:hover:text-white dark:hover:bg-zinc-800'
+            "
+            @click="handleSelectRegion(reg.id)"
+          >
+            <span>{{ reg.flag }}</span>
+            <span>{{ reg.label }}</span>
+          </button>
         </div>
 
-        <!-- Mode B: Expanded Multi-Row Grid with In-Place Search -->
-        <div v-else class="space-y-2 pt-1 animate-in fade-in-50 duration-200">
-          <div
-            class="flex items-center gap-2 rounded-xl px-3 py-1.5 transition
-                   bg-white border border-slate-200/90 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20
-                   dark:bg-black/40 dark:border-white/15 dark:focus-within:ring-amber-500/30"
-          >
-            <Search :size="13" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-500" />
-            <input
-              v-model="countrySearchQuery"
-              type="text"
-              placeholder="Search 22 countries..."
-              class="w-full min-w-0 bg-transparent text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none dark:text-white dark:placeholder-zinc-500"
-            />
-            <button
-              v-if="countrySearchQuery"
-              type="button"
-              class="shrink-0 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white cursor-pointer"
-              aria-label="Clear country search"
-              @click="countrySearchQuery = ''"
-            >
-              <X :size="12" />
-            </button>
-          </div>
+        <div
+          class="pointer-events-none absolute right-0 inset-y-0 w-6 z-10 bg-gradient-to-l from-slate-50 dark:from-[#08080c] to-transparent transition-opacity duration-200"
+          :class="countryScroll.canScrollRight.value ? 'opacity-100' : 'opacity-0'"
+        ></div>
+      </div>
 
-          <div class="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto pr-1 py-1">
-            <button
-              v-for="reg in filteredRegions"
-              :key="reg.id"
-              :data-active="activeRegion === reg.id"
-              type="button"
-              class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
-              :class="
-                activeRegion === reg.id
-                  ? 'bg-gradient-to-r from-amber-600 to-amber-500 !text-white shadow-md shadow-amber-600/30 border-amber-500 font-bold'
-                  : 'bg-white text-slate-700 border-slate-200 shadow-xs hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 dark:bg-white/[0.08] dark:text-zinc-200 dark:border-white/10 dark:hover:text-white dark:hover:bg-white/[0.14]'
-              "
-              @click="handleSelectRegion(reg.id); isCountryGridExpanded = false"
-            >
-              <span>{{ reg.flag }}</span>
-              <span>{{ reg.label }}</span>
-            </button>
-            <p v-if="filteredRegions.length === 0" class="w-full py-3 text-center text-xs text-slate-500 dark:text-zinc-400">
-              No country matches “{{ countrySearchQuery }}”
-            </p>
-          </div>
+      <!-- Mode B: Expanded Multi-Row Grid with In-Place Search -->
+      <div v-else class="space-y-2 pt-1 animate-in fade-in-50 duration-200">
+        <div
+          class="flex items-center gap-2 rounded-xl px-3 py-1.5 transition
+                 bg-white border border-slate-200/90 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20
+                 dark:bg-black/40 dark:border-white/15 dark:focus-within:ring-amber-500/30"
+        >
+          <Search :size="13" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-500" />
+          <input
+            v-model="countrySearchQuery"
+            type="text"
+            placeholder="Search countries..."
+            class="w-full min-w-0 bg-transparent text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none dark:text-white dark:placeholder-zinc-500"
+          />
+          <button
+            v-if="countrySearchQuery"
+            type="button"
+            class="shrink-0 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white cursor-pointer"
+            aria-label="Clear country search"
+            @click="countrySearchQuery = ''"
+          >
+            <X :size="12" />
+          </button>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto pr-1 py-1">
+          <button
+            v-for="reg in filteredRegions"
+            :key="reg.id"
+            :data-active="activeRegion === reg.id"
+            type="button"
+            class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer border"
+            :class="
+              activeRegion === reg.id
+                ? 'bg-gradient-to-r from-amber-600 to-amber-500 !text-white shadow-md shadow-amber-600/30 border-amber-500 font-bold'
+                : 'bg-white text-slate-700 border-slate-200 shadow-xs hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 dark:bg-zinc-900/80 dark:text-zinc-200 dark:border-white/10 dark:hover:text-white dark:hover:bg-zinc-800'
+            "
+            @click="handleSelectRegion(reg.id); isCountryGridExpanded = false"
+          >
+            <span>{{ reg.flag }}</span>
+            <span>{{ reg.label }}</span>
+          </button>
+          <p v-if="filteredRegions.length === 0" class="w-full py-3 text-center text-xs text-slate-500 dark:text-zinc-400">
+            No country matches “{{ countrySearchQuery }}”
+          </p>
         </div>
       </div>
     </div>

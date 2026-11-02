@@ -83,63 +83,71 @@ function onDrop(e: DragEvent): void {
 </script>
 
 <template>
-  <div class="space-y-4" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
-    <!-- Library Hero Overview Card -->
+  <div class="space-y-3" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
+    <!-- Compact Library Toolbar Card -->
     <div
-      class="relative overflow-hidden rounded-3xl p-5 shadow-lg backdrop-blur-xl transition-all border
-             bg-gradient-to-br from-indigo-50/90 via-white to-blue-50/70 border-indigo-100/90 shadow-indigo-100/40
-             dark:bg-gradient-to-br dark:from-[#13112a]/95 dark:via-[#0e0e1a]/95 dark:to-[#08080c]/95 dark:border-white/10 dark:shadow-2xl"
-      :class="{ 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-950/80': isDraggingFiles }">
-      <div class="pointer-events-none absolute -right-4 -top-4 h-32 w-32 rounded-full bg-indigo-500/15 blur-2xl"></div>
+      class="relative overflow-hidden rounded-2xl p-3 sm:p-3.5 shadow-sm backdrop-blur-xl transition-all border
+             bg-gradient-to-r from-indigo-50/70 via-white to-blue-50/40 border-indigo-100/90 shadow-indigo-100/20
+             dark:bg-gradient-to-r dark:from-[#131124]/90 dark:via-[#0e0e18]/90 dark:to-[#08080c]/90 dark:border-white/10 dark:shadow-none"
+      :class="{ 'ring-2 ring-indigo-400 bg-indigo-50/90 dark:bg-indigo-950/80': isDraggingFiles }">
 
-      <div class="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase
-                     bg-indigo-100/90 text-indigo-700 border border-indigo-200/70
-                     dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30">
-              Offline Library
-            </span>
-            <span v-if="totalDurationFormatted" class="text-xs text-slate-500 dark:text-zinc-400 font-medium">
-              {{ totalDurationFormatted }}
-            </span>
+      <!-- Header Row: Title, stats, and quick actions -->
+      <div class="relative z-10 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl
+                   bg-indigo-100 text-indigo-700 border border-indigo-200/80 shadow-2xs
+                   dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30"
+          >
+            <Music :size="15" />
           </div>
-
-          <h2 class="mt-1.5 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            Your Music
-          </h2>
-          <p class="text-xs text-slate-500 dark:text-zinc-300 mt-0.5">
-            {{ tracks.length }} {{ tracks.length === 1 ? 'song' : 'songs' }} stored privately on your device
-          </p>
+          <div class="min-w-0">
+            <div class="flex items-baseline gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                Your Music
+              </h2>
+              <span class="text-[11px] font-semibold text-slate-500 dark:text-zinc-400 whitespace-nowrap">
+                {{ tracks.length }} {{ tracks.length === 1 ? 'song' : 'songs' }}
+                <template v-if="totalDurationFormatted">· {{ totalDurationFormatted }}</template>
+              </span>
+            </div>
+          </div>
         </div>
 
-        <!-- Quick Action Buttons -->
-        <div class="flex items-center gap-2.5">
-          <button type="button"
-            class="btn-primary-white flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2.5 text-xs font-bold shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500 disabled:opacity-50 cursor-pointer"
-            :disabled="isImporting" @click="emit('openFilePicker')">
-            <FolderPlus :size="15" />
-            <span>{{ isImporting ? 'Importing...' : 'Add Music' }}</span>
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            v-if="tracks.length > 0"
+            type="button"
+            class="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer
+                   bg-white text-slate-700 border border-slate-200/90 shadow-2xs hover:bg-slate-50 hover:text-slate-900
+                   dark:bg-zinc-800/90 dark:text-zinc-200 dark:border-white/10 dark:hover:bg-zinc-700 dark:hover:text-white"
+            title="Shuffle play all songs"
+            @click="emit('shuffleAll')"
+          >
+            <Shuffle :size="13" />
+            <span class="hidden sm:inline">Shuffle</span>
           </button>
 
-          <button v-if="tracks.length > 0" type="button"
-            class="flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-xs font-semibold transition active:scale-95 cursor-pointer
-                   bg-white text-slate-700 border border-slate-200/90 shadow-sm hover:bg-slate-50 hover:text-slate-900
-                   dark:bg-zinc-800/90 dark:text-zinc-200 dark:border-white/10 dark:hover:bg-zinc-700 dark:hover:text-white" title="Shuffle play all songs"
-            @click="emit('shuffleAll')">
-            <Shuffle :size="14" />
-            <span class="hidden sm:inline">Shuffle All</span>
+          <button
+            type="button"
+            class="btn-primary-white flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold shadow-md shadow-indigo-600/25 ring-1 ring-white/20 transition active:scale-95 hover:bg-indigo-500 disabled:opacity-50 cursor-pointer"
+            :disabled="isImporting"
+            @click="emit('openFilePicker')"
+          >
+            <FolderPlus :size="14" />
+            <span>{{ isImporting ? 'Importing...' : 'Add Music' }}</span>
           </button>
         </div>
       </div>
 
-      <!-- Quick Search Bar inside Library -->
+      <!-- Quick Search Bar -->
       <div
-        class="mt-4 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 backdrop-blur-md transition
-               bg-white border border-slate-200/90 shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500
-               dark:bg-black/40 dark:border-white/15 dark:focus-within:border-indigo-500 dark:focus-within:ring-2 dark:focus-within:ring-indigo-500"
+        class="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-1.5 backdrop-blur-md transition
+               bg-white/90 border border-slate-200/90 shadow-2xs focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20
+               dark:bg-black/40 dark:border-white/10 dark:focus-within:border-indigo-500 dark:focus-within:ring-2 dark:focus-within:ring-indigo-500/30 dark:focus-within:bg-black/60"
       >
-        <Search :size="15" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
+        <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
           :value="searchQuery"
           type="search"
@@ -150,11 +158,11 @@ function onDrop(e: DragEvent): void {
         <button
           v-if="searchQuery"
           type="button"
-          class="shrink-0 text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white transition active:scale-90 cursor-pointer"
+          class="shrink-0 text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white transition active:scale-90 cursor-pointer p-0.5"
           aria-label="Clear library search"
           @click="emit('update:searchQuery', '')"
         >
-          <X :size="14" />
+          <X :size="13" />
         </button>
       </div>
     </div>

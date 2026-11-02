@@ -78,44 +78,58 @@ const headerTitle = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <!-- Discover Hero Banner -->
+  <div class="space-y-3">
+    <!-- Compact Discover Toolbar Card -->
     <div
-      class="relative overflow-hidden rounded-3xl p-5 shadow-lg backdrop-blur-xl transition-all border
-             bg-gradient-to-br from-purple-50/90 via-white to-indigo-50/70 border-purple-100/90 shadow-purple-100/40
-             dark:bg-gradient-to-br dark:from-[#1d1033]/95 dark:via-[#110e20]/95 dark:to-[#08080c]/95 dark:border-white/10 dark:shadow-2xl"
+      class="relative overflow-hidden rounded-2xl p-3 sm:p-3.5 shadow-sm backdrop-blur-xl transition-all border
+             bg-gradient-to-r from-purple-50/70 via-white to-indigo-50/40 border-purple-100/90 shadow-purple-100/20
+             dark:bg-gradient-to-r dark:from-[#170e28]/90 dark:via-[#110e1c]/90 dark:to-[#08080c]/90 dark:border-white/10 dark:shadow-none"
     >
-      <div class="pointer-events-none absolute -right-6 -bottom-6 h-36 w-36 rounded-full bg-purple-500/15 dark:bg-indigo-500/20 blur-2xl"></div>
-      <div class="relative z-10 flex items-center justify-between">
-        <div>
-          <div class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-            <Sparkles :size="13" />
-            <span>Jamendo Catalog</span>
+      <!-- Header Row: Title & badge -->
+      <div class="relative z-10 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl
+                   bg-purple-100 text-purple-700 border border-purple-200/80 shadow-2xs
+                   dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30"
+          >
+            <Compass :size="15" />
           </div>
-          <h2 class="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            Discover Music
-          </h2>
-          <p class="mt-0.5 text-xs text-slate-500 dark:text-zinc-300">
-            Stream millions of legal, royalty-free songs
-          </p>
+          <div class="min-w-0">
+            <div class="flex items-baseline gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                Discover Music
+              </h2>
+              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider
+                           bg-purple-100/90 text-purple-700 border border-purple-200/70
+                           dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30 whitespace-nowrap">
+                <Sparkles :size="10" />
+                Jamendo Free
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div
-          class="flex h-12 w-12 items-center justify-center rounded-2xl
-                 bg-purple-100/90 text-purple-600 border border-purple-200/80 shadow-sm
-                 dark:bg-indigo-600/30 dark:text-indigo-400 dark:border-indigo-500/30 dark:shadow-inner"
+        <button
+          v-if="error"
+          type="button"
+          class="flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-semibold transition active:scale-95 cursor-pointer
+                 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100
+                 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-500/30 shrink-0"
+          @click="emit('retry')"
         >
-          <Compass :size="24" />
-        </div>
+          <RefreshCw :size="12" />
+          <span>Retry</span>
+        </button>
       </div>
 
       <!-- Discover Search Bar -->
       <div
-        class="mt-4 flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 backdrop-blur-md transition
-               bg-white border border-slate-200/90 shadow-sm focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500
-               dark:bg-black/40 dark:border-white/15 dark:focus-within:ring-indigo-500 dark:focus-within:border-indigo-500"
+        class="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-1.5 backdrop-blur-md transition
+               bg-white/90 border border-slate-200/90 shadow-2xs focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20
+               dark:bg-black/40 dark:border-white/10 dark:focus-within:border-purple-500 dark:focus-within:ring-2 dark:focus-within:ring-purple-500/30 dark:focus-within:bg-black/60"
       >
-        <Search :size="16" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
+        <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
           :value="searchQuery"
           type="search"
@@ -126,11 +140,11 @@ const headerTitle = computed(() => {
         <button
           v-if="searchQuery"
           type="button"
-          class="shrink-0 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white transition active:scale-90 cursor-pointer"
+          class="shrink-0 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white transition active:scale-90 cursor-pointer p-0.5"
           aria-label="Clear search"
           @click="emit('update:searchQuery', '')"
         >
-          <X :size="15" />
+          <X :size="13" />
         </button>
       </div>
     </div>
