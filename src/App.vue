@@ -656,7 +656,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="fixed inset-0 flex w-full flex-col overflow-hidden bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 app-viewport antialiased select-none font-sans"
+    class="fixed inset-0 w-full h-full overflow-hidden bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 app-viewport antialiased select-none font-sans"
   >
     <!-- Hidden native file picker -->
     <input
@@ -701,10 +701,10 @@ onBeforeUnmount(() => {
     <!-- ============================================================== -->
     <div
       v-show="activeTab === 'library'"
-      class="relative flex h-full flex-col overflow-hidden"
+      class="absolute inset-0 flex flex-col overflow-hidden bg-slate-50 dark:bg-[#08080c]"
     >
       <!-- Top App Bar with Branding and Status -->
-      <header class="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-3 shrink-0">
+      <header class="shrink-0 flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-3 z-10 bg-slate-50/90 dark:bg-[#08080c]/90 backdrop-blur-md">
         <div class="flex items-center gap-3">
           <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-indigo-400 shadow-lg shadow-indigo-600/30 ring-1 ring-white/20">
             <AudioLines :size="22" class="text-white" />
@@ -764,15 +764,8 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <!-- Scrollable content area -->
-      <main
-        class="flex-1 overflow-y-auto px-5"
-        :class="[
-          currentTrack && activeMainTab !== 'tv' && !activePlayingChannel
-            ? 'pb-[calc(max(env(safe-area-inset-bottom,0px),10px)+7.75rem)]'
-            : 'pb-[calc(max(env(safe-area-inset-bottom,0px),10px)+4.5rem)]'
-        ]"
-      >
+      <!-- Scrollable content area: Fills all middle space -->
+      <main class="flex-1 min-h-0 w-full overflow-y-auto px-5 pb-4">
         <!-- 1. Library Pillar -->
         <TrackList
           v-if="activeMainTab === 'library'"
@@ -866,58 +859,69 @@ onBeforeUnmount(() => {
         />
       </main>
 
-      <!-- Mini Player Bar (Docked smoothly above Fixed Bottom Navigation) -->
-      <MiniPlayerBar
-        v-if="currentTrack && activeMainTab !== 'tv' && !activePlayingChannel"
-        :current-track="currentTrack"
-        :is-playing="isPlaying"
-        :progress-percent="progressPercent"
-        :is-liked="likedIds.has(currentTrack.id)"
-        @toggle-play="player.togglePlay()"
-        @toggle-like="toggleLike"
-        @expand="activeTab = 'player'"
-      />
+      <!-- Bottom Dock & Mini Player Stack: Grounded firmly at the bottom -->
+      <footer class="shrink-0 w-full relative z-30 flex flex-col pointer-events-auto">
+        <!-- Mini Player Bar: Sits immediately above bottom dock when a song is loaded -->
+        <div
+          v-if="currentTrack && activeMainTab !== 'tv' && !activePlayingChannel"
+          class="w-full px-3 pb-2 max-w-lg mx-auto"
+        >
+          <MiniPlayerBar
+            :current-track="currentTrack"
+            :is-playing="isPlaying"
+            :progress-percent="progressPercent"
+            :is-liked="likedIds.has(currentTrack.id)"
+            @toggle-play="player.togglePlay()"
+            @toggle-like="toggleLike"
+            @expand="activeTab = 'player'"
+          />
+        </div>
 
-      <!-- Fixed Bottom Navigation Bar (Solid, Edge-to-Edge, Non-floating) -->
-      <BottomNavDock
-        :active-tab="activeMainTab"
-        :local-count="localCount"
-        @select-tab="switchMainTab"
-      />
+        <!-- Fixed Bottom Navigation Bar -->
+        <BottomNavDock
+          :active-tab="activeMainTab"
+          :local-count="localCount"
+          @select-tab="switchMainTab"
+        />
+      </footer>
     </div>
 
     <!-- ============================================================== -->
     <!-- VIEW 2: FULLSCREEN NOW PLAYING OVERLAY                          -->
     <!-- ============================================================== -->
-    <NowPlayingView
+    <div
       v-show="activeTab === 'player'"
-      :current-track="currentTrack"
-      :prev-track="prevTrack"
-      :next-track="nextTrack"
-      :is-playing="isPlaying"
-      :current-time="currentTime"
-      :duration="duration"
-      :is-shuffle="isShuffle"
-      :repeat-mode="repeatMode"
-      :is-liked="currentTrack ? likedIds.has(currentTrack.id) : false"
-      :sleep-label="sleepLabel"
-      :is-sleep-active="sleep.isActive.value"
-      :active-tab="activeTab"
-      :volume="volume"
-      :volume-supported="volumeSupported"
-      @back="activeTab = 'library'"
-      @open-queue="playlistOpen = true"
-      @open-sleep="sleepOpen = true"
-      @toggle-play="player.togglePlay()"
-      @toggle-shuffle="player.toggleShuffle()"
-      @cycle-repeat="player.cycleRepeat()"
-      @previous="player.previous()"
-      @next="player.next()"
-      @seek="player.seek"
-      @seek-by="player.seekBy"
-      @toggle-like="toggleLike"
-      @set-volume="setVolume"
-    />
+      class="absolute inset-0 z-40 overflow-hidden"
+    >
+      <NowPlayingView
+        :current-track="currentTrack"
+        :prev-track="prevTrack"
+        :next-track="nextTrack"
+        :is-playing="isPlaying"
+        :current-time="currentTime"
+        :duration="duration"
+        :is-shuffle="isShuffle"
+        :repeat-mode="repeatMode"
+        :is-liked="currentTrack ? likedIds.has(currentTrack.id) : false"
+        :sleep-label="sleepLabel"
+        :is-sleep-active="sleep.isActive.value"
+        :active-tab="activeTab"
+        :volume="volume"
+        :volume-supported="volumeSupported"
+        @back="activeTab = 'library'"
+        @open-queue="playlistOpen = true"
+        @open-sleep="sleepOpen = true"
+        @toggle-play="player.togglePlay()"
+        @toggle-shuffle="player.toggleShuffle()"
+        @cycle-repeat="player.cycleRepeat()"
+        @previous="player.previous()"
+        @next="player.next()"
+        @seek="player.seek"
+        @seek-by="player.seekBy"
+        @toggle-like="toggleLike"
+        @set-volume="setVolume"
+      />
+    </div>
 
     <!-- ============================================================== -->
     <!-- DRAWERS & MODALS                                               -->

@@ -72,7 +72,8 @@ body,
 
 @supports (-webkit-touch-callout: none) {
   html,
-  body {
+  body,
+  #app {
     min-height: -webkit-fill-available;
   }
 }

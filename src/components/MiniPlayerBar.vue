@@ -17,10 +17,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div
-    class="absolute inset-x-3 z-20 mx-auto max-w-lg pointer-events-auto"
-    style="bottom: calc(max(env(safe-area-inset-bottom, 0px), 10px) + 3.45rem);"
-  >
+  <div class="w-full pointer-events-auto">
     <div
       class="glass-mini-player relative flex flex-col overflow-hidden rounded-2xl p-2.5 shadow-2xl transition-all duration-200 active:scale-[0.99] cursor-pointer"
       @click="emit('expand')"
