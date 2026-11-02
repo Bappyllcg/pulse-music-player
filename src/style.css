@@ -375,6 +375,120 @@ html.light .pulse-range {
 }
 
 /* ========================================================================== */
+/* Application Motion & Transition System                                     */
+/* ========================================================================== */
+
+/* Fullscreen Now Playing Sheet Slide Transition */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.28s ease;
+  will-change: transform;
+}
+
+.sheet-enter-from,
+.sheet-leave-to {
+  transform: translateY(100%);
+  opacity: 0.85;
+}
+
+.sheet-enter-to,
+.sheet-leave-from {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Main Navigation Tab Crossfade */
+.tab-crossfade-enter-active,
+.tab-crossfade-leave-active {
+  transition: opacity 0.18s ease-out, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tab-crossfade-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.tab-crossfade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* Mini Player Bar Float Transition */
+.mini-player-float-enter-active,
+.mini-player-float-leave-active {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out;
+}
+
+.mini-player-float-enter-from,
+.mini-player-float-leave-to {
+  transform: translateY(16px) scale(0.97);
+  opacity: 0;
+}
+
+/* Modal Backdrop & Dialog Spring Pop */
+.modal-spring-enter-active,
+.modal-spring-leave-active {
+  transition: opacity 0.22s ease-out;
+}
+
+.modal-spring-enter-active .modal-dialog-sheet,
+.modal-spring-leave-active .modal-dialog-sheet {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out;
+  will-change: transform, opacity;
+}
+
+.modal-spring-enter-from,
+.modal-spring-leave-to {
+  opacity: 0;
+}
+
+.modal-spring-enter-from .modal-dialog-sheet,
+.modal-spring-leave-to .modal-dialog-sheet {
+  transform: scale(0.94) translateY(10px);
+  opacity: 0;
+}
+
+/* Cinema Live TV Player Fade */
+.cinema-fade-enter-active,
+.cinema-fade-leave-active {
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cinema-fade-enter-from,
+.cinema-fade-leave-to {
+  opacity: 0;
+}
+
+/* FLIP Media List Transitions */
+.media-list-move,
+.media-list-enter-active,
+.media-list-leave-active {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.media-list-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.media-list-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Heart Micro-Interaction */
+@keyframes heart-burst {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.35); }
+  75% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+
+.animate-heart-pop {
+  animation: heart-burst 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* ========================================================================== */
 /* Accessibility & Reduced Motion                                             */
 /* ========================================================================== */
 
@@ -384,8 +498,28 @@ html.light .pulse-range {
   .animate-pulse,
   .animate-spin,
   .animate-pulse-subtle,
-  .animate-ambient-float {
+  .animate-ambient-float,
+  .animate-heart-pop {
     animation: none !important;
     transition: none !important;
+  }
+
+  .sheet-enter-active,
+  .sheet-leave-active,
+  .tab-crossfade-enter-active,
+  .tab-crossfade-leave-active,
+  .mini-player-float-enter-active,
+  .mini-player-float-leave-active,
+  .modal-spring-enter-active,
+  .modal-spring-leave-active,
+  .modal-spring-enter-active .modal-dialog-sheet,
+  .modal-spring-leave-active .modal-dialog-sheet,
+  .cinema-fade-enter-active,
+  .cinema-fade-leave-active,
+  .media-list-move,
+  .media-list-enter-active,
+  .media-list-leave-active {
+    transition: opacity 0.08s ease-in-out !important;
+    transform: none !important;
   }
 }

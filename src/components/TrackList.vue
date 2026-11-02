@@ -258,7 +258,7 @@ function onDrop(e: DragEvent): void {
     </div>
 
     <!-- Track List -->
-    <div v-else class="space-y-2">
+    <TransitionGroup v-else name="media-list" tag="div" class="space-y-2">
       <div v-for="track in tracks" :key="track.id"
         class="group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
         :class="currentTrack?.id === track.id
@@ -322,7 +322,7 @@ function onDrop(e: DragEvent): void {
             :class="{ 'text-rose-500 hover:text-rose-600 dark:text-rose-500 dark:hover:text-rose-400': likedIds.has(track.id) }"
             :aria-label="likedIds.has(track.id) ? 'Unlike song' : 'Like song'"
             @click.stop="emit('toggleLike', track.id)">
-            <Heart :size="16" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" />
+            <Heart :size="16" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" :class="{ 'animate-heart-pop': likedIds.has(track.id) }" />
           </button>
 
           <!-- Remove Button -->
@@ -348,6 +348,6 @@ function onDrop(e: DragEvent): void {
           </button>
         </div>
       </div>
-    </div>
+    </TransitionGroup>
   </div>
 </template>

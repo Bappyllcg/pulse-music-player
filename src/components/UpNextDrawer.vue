@@ -150,7 +150,7 @@ const totalQueueTime = computed(() => {
       </div>
 
       <!-- Queue Track Items List -->
-      <div v-else ref="queueListRef" class="flex-1 overflow-y-auto px-5 py-3 space-y-1.5">
+      <TransitionGroup v-else ref="queueListRef" name="media-list" tag="div" class="flex-1 overflow-y-auto px-5 py-3 space-y-1.5">
         <div v-for="(track, index) in queue" :key="track.id"
           class="group flex items-center justify-between rounded-2xl p-2 border transition-all duration-150 active:scale-[0.99] cursor-pointer"
           :class="currentTrack?.id === track.id
@@ -204,7 +204,7 @@ const totalQueueTime = computed(() => {
             </button>
           </div>
         </div>
-      </div>
+      </TransitionGroup>
     </aside>
   </div>
 </template>

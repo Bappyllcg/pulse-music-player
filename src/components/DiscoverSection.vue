@@ -326,7 +326,7 @@ const headerTitle = computed(() => {
     </div>
 
     <!-- Track List -->
-    <div v-else class="space-y-2">
+    <TransitionGroup v-else name="media-list" tag="div" class="space-y-2">
       <div
         v-for="track in tracks"
         :key="track.id"
@@ -404,7 +404,7 @@ const headerTitle = computed(() => {
             :aria-label="likedIds.has(track.id) ? 'Unlike song' : 'Like song'"
             @click.stop="emit('toggleLike', track.id)"
           >
-            <Heart :size="16" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" />
+            <Heart :size="16" :fill="likedIds.has(track.id) ? 'currentColor' : 'none'" :class="{ 'animate-heart-pop': likedIds.has(track.id) }" />
           </button>
 
           <!-- Play / Pause Icon Button -->
@@ -427,6 +427,6 @@ const headerTitle = computed(() => {
           </button>
         </div>
       </div>
-    </div>
+    </TransitionGroup>
   </div>
 </template>

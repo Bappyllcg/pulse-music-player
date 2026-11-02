@@ -50,23 +50,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
-    <!-- Backdrop Overlay -->
-    <div
-      class="fixed inset-0 bg-black/70 backdrop-blur-md transition-opacity duration-300"
-      aria-hidden="true"
-      @click="handleClose"
-    ></div>
+  <Transition name="modal-spring">
+    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+      <!-- Backdrop Overlay -->
+      <div
+        class="fixed inset-0 bg-black/70 backdrop-blur-md"
+        aria-hidden="true"
+        @click="handleClose"
+      ></div>
 
-    <!-- Modal Dialog Sheet -->
-    <div
-      class="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl
-             bg-white border-slate-200 text-slate-900
-             dark:bg-zinc-900/95 dark:border-white/10 dark:text-zinc-100"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="settings-modal-title"
-    >
+      <!-- Modal Dialog Sheet -->
+      <div
+        class="modal-dialog-sheet relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl
+               bg-white border-slate-200 text-slate-900
+               dark:bg-zinc-900/95 dark:border-white/10 dark:text-zinc-100"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+      >
       <!-- Modal Header -->
       <div
         class="sticky top-0 z-20 flex items-center justify-between border-b px-6 py-4 backdrop-blur-xl
@@ -325,4 +326,5 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+  </Transition>
 </template>

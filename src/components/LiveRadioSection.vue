@@ -422,7 +422,7 @@ function toggleCountryGrid() {
     </div>
 
     <!-- Station Grid -->
-    <div v-else class="space-y-2">
+    <TransitionGroup v-else name="media-list" tag="div" class="space-y-2">
       <div
         v-for="station in stations"
         :key="station.id"
@@ -562,7 +562,7 @@ function toggleCountryGrid() {
             :aria-label="likedIds.has(station.id) ? 'Unlike station' : 'Like station'"
             @click.stop="emit('toggleLike', station.id)"
           >
-            <Heart :size="16" :fill="likedIds.has(station.id) ? 'currentColor' : 'none'" />
+            <Heart :size="16" :fill="likedIds.has(station.id) ? 'currentColor' : 'none'" :class="{ 'animate-heart-pop': likedIds.has(station.id) }" />
           </button>
 
           <!-- Play / Pause Icon Button -->
@@ -585,6 +585,6 @@ function toggleCountryGrid() {
           </button>
         </div>
       </div>
-    </div>
+    </TransitionGroup>
   </div>
 </template>

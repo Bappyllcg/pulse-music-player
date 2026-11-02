@@ -766,116 +766,124 @@ onBeforeUnmount(() => {
 
       <!-- Scrollable content area: Fills all middle space -->
       <main class="flex-1 min-h-0 w-full overflow-y-auto px-5 pb-4">
-        <!-- 1. Library Pillar -->
-        <TrackList
-          v-if="activeMainTab === 'library'"
-          :tracks="filteredLibraryTracks"
-          :current-track="currentTrack"
-          :is-playing="isPlaying"
-          :liked-ids="likedIds"
-          :is-importing="isImporting"
-          :selected-filter="selectedLibraryFilter"
-          :search-query="librarySearch"
-          @update:search-query="librarySearch = $event"
-          @select-filter="selectedLibraryFilter = $event"
-          @play-track="playTrackAndShow"
-          @toggle-playback="toggleTrackPlayback"
-          @toggle-like="toggleLike"
-          @remove-track="promptRemoveTrack"
-          @open-file-picker="openFilePicker"
-          @drop-files="importFiles"
-          @shuffle-all="shuffleAllLibrary"
-          @switch-to-discover="switchMainTab('discover')"
-        />
+        <Transition name="tab-crossfade" mode="out-in">
+          <!-- 1. Library Pillar -->
+          <TrackList
+            v-if="activeMainTab === 'library'"
+            key="library"
+            :tracks="filteredLibraryTracks"
+            :current-track="currentTrack"
+            :is-playing="isPlaying"
+            :liked-ids="likedIds"
+            :is-importing="isImporting"
+            :selected-filter="selectedLibraryFilter"
+            :search-query="librarySearch"
+            @update:search-query="librarySearch = $event"
+            @select-filter="selectedLibraryFilter = $event"
+            @play-track="playTrackAndShow"
+            @toggle-playback="toggleTrackPlayback"
+            @toggle-like="toggleLike"
+            @remove-track="promptRemoveTrack"
+            @open-file-picker="openFilePicker"
+            @drop-files="importFiles"
+            @shuffle-all="shuffleAllLibrary"
+            @switch-to-discover="switchMainTab('discover')"
+          />
 
-        <!-- 2. Discover Pillar (Jamendo Online Music) -->
-        <DiscoverSection
-          v-else-if="activeMainTab === 'discover'"
-          :genres="onlineGenres"
-          :active-genre-id="activeGenreId"
-          :tracks="onlineTracks"
-          :current-track="currentTrack"
-          :is-playing="isPlaying"
-          :is-loading="isLoadingOnline"
-          :error="onlineError"
-          :search-query="discoverSearch"
-          :liked-ids="likedIds"
-          @update:search-query="discoverSearch = $event"
-          @select-genre="onSelectGenre"
-          @play-track="playTrackAndShow"
-          @toggle-playback="toggleTrackPlayback"
-          @toggle-like="toggleLike"
-          @retry="fetchOnlineTracks(true)"
-        />
+          <!-- 2. Discover Pillar (Jamendo Online Music) -->
+          <DiscoverSection
+            v-else-if="activeMainTab === 'discover'"
+            key="discover"
+            :genres="onlineGenres"
+            :active-genre-id="activeGenreId"
+            :tracks="onlineTracks"
+            :current-track="currentTrack"
+            :is-playing="isPlaying"
+            :is-loading="isLoadingOnline"
+            :error="onlineError"
+            :search-query="discoverSearch"
+            :liked-ids="likedIds"
+            @update:search-query="discoverSearch = $event"
+            @select-genre="onSelectGenre"
+            @play-track="playTrackAndShow"
+            @toggle-playback="toggleTrackPlayback"
+            @toggle-like="toggleLike"
+            @retry="fetchOnlineTracks(true)"
+          />
 
-        <!-- 3. Live Radio Pillar -->
-        <LiveRadioSection
-          v-else-if="activeMainTab === 'radio'"
-          :regions="radioRegions"
-          :categories="radioCategories"
-          :active-region="activeRadioRegion"
-          :active-category="activeRadioCategory"
-          :stations="filteredRadioStations"
-          :current-track="currentTrack"
-          :is-playing="isPlaying"
-          :is-loading="isLoadingRadio"
-          :error="radioError"
-          :active-label="activeRadioLabel"
-          :search-query="currentRadioSearch"
-          :liked-ids="likedIds"
-          :get-station-status="getRadioStationStatus"
-          :get-station-latency="getRadioStationLatency"
-          :get-network-strength="getRadioNetworkStrength"
-          @update:search-query="currentRadioSearch = $event"
-          @select-region="onSelectRadioRegion"
-          @select-category="onSelectRadioCategory"
-          @refresh="fetchRadioStations(true)"
-          @play-station="playTrackAndShow"
-          @toggle-playback="toggleTrackPlayback"
-          @toggle-like="toggleLike"
-        />
+          <!-- 3. Live Radio Pillar -->
+          <LiveRadioSection
+            v-else-if="activeMainTab === 'radio'"
+            key="radio"
+            :regions="radioRegions"
+            :categories="radioCategories"
+            :active-region="activeRadioRegion"
+            :active-category="activeRadioCategory"
+            :stations="filteredRadioStations"
+            :current-track="currentTrack"
+            :is-playing="isPlaying"
+            :is-loading="isLoadingRadio"
+            :error="radioError"
+            :active-label="activeRadioLabel"
+            :search-query="currentRadioSearch"
+            :liked-ids="likedIds"
+            :get-station-status="getRadioStationStatus"
+            :get-station-latency="getRadioStationLatency"
+            :get-network-strength="getRadioNetworkStrength"
+            @update:search-query="currentRadioSearch = $event"
+            @select-region="onSelectRadioRegion"
+            @select-category="onSelectRadioCategory"
+            @refresh="fetchRadioStations(true)"
+            @play-station="playTrackAndShow"
+            @toggle-playback="toggleTrackPlayback"
+            @toggle-like="toggleLike"
+          />
 
-        <!-- 4. Live TV Pillar -->
-        <LiveTvSection
-          v-else-if="activeMainTab === 'tv'"
-          :regions="tvRegions"
-          :categories="tvCategories"
-          :active-region="activeTvRegion"
-          :active-category="activeTvCategory"
-          :channels="filteredTvChannels"
-          :active-playing-channel="activePlayingChannel"
-          :is-loading="isLoadingTv"
-          :error="tvError"
-          :active-label="activeTvLabel"
-          :search-query="currentTvSearch"
-          :get-channel-status="getTvChannelStatus"
-          :get-channel-latency="getTvChannelLatency"
-          :get-network-strength="getTvNetworkStrength"
-          @update:search-query="currentTvSearch = $event"
-          @select-region="onSelectTvRegion"
-          @select-category="onSelectTvCategory"
-          @refresh="selectTvRegion(activeTvRegion, true)"
-          @play-channel="onPlayTvChannel"
-        />
+          <!-- 4. Live TV Pillar -->
+          <LiveTvSection
+            v-else-if="activeMainTab === 'tv'"
+            key="tv"
+            :regions="tvRegions"
+            :categories="tvCategories"
+            :active-region="activeTvRegion"
+            :active-category="activeTvCategory"
+            :channels="filteredTvChannels"
+            :active-playing-channel="activePlayingChannel"
+            :is-loading="isLoadingTv"
+            :error="tvError"
+            :active-label="activeTvLabel"
+            :search-query="currentTvSearch"
+            :get-channel-status="getTvChannelStatus"
+            :get-channel-latency="getTvChannelLatency"
+            :get-network-strength="getTvNetworkStrength"
+            @update:search-query="currentTvSearch = $event"
+            @select-region="onSelectTvRegion"
+            @select-category="onSelectTvCategory"
+            @refresh="selectTvRegion(activeTvRegion, true)"
+            @play-channel="onPlayTvChannel"
+          />
+        </Transition>
       </main>
 
       <!-- Bottom Dock & Mini Player Stack: Grounded firmly at the bottom -->
       <footer class="shrink-0 w-full relative z-30 flex flex-col pointer-events-auto">
         <!-- Mini Player Bar: Sits immediately above bottom dock when a song is loaded -->
-        <div
-          v-if="currentTrack && activeMainTab !== 'tv' && !activePlayingChannel"
-          class="w-full px-3 pb-2 max-w-lg mx-auto"
-        >
-          <MiniPlayerBar
-            :current-track="currentTrack"
-            :is-playing="isPlaying"
-            :progress-percent="progressPercent"
-            :is-liked="likedIds.has(currentTrack.id)"
-            @toggle-play="player.togglePlay()"
-            @toggle-like="toggleLike"
-            @expand="activeTab = 'player'"
-          />
-        </div>
+        <Transition name="mini-player-float">
+          <div
+            v-if="currentTrack && activeMainTab !== 'tv' && !activePlayingChannel"
+            class="w-full px-3 pb-2 max-w-lg mx-auto"
+          >
+            <MiniPlayerBar
+              :current-track="currentTrack"
+              :is-playing="isPlaying"
+              :progress-percent="progressPercent"
+              :is-liked="likedIds.has(currentTrack.id)"
+              @toggle-play="player.togglePlay()"
+              @toggle-like="toggleLike"
+              @expand="activeTab = 'player'"
+            />
+          </div>
+        </Transition>
 
         <!-- Fixed Bottom Navigation Bar -->
         <BottomNavDock
@@ -889,39 +897,41 @@ onBeforeUnmount(() => {
     <!-- ============================================================== -->
     <!-- VIEW 2: FULLSCREEN NOW PLAYING OVERLAY                          -->
     <!-- ============================================================== -->
-    <div
-      v-show="activeTab === 'player'"
-      class="absolute inset-0 z-40 overflow-hidden"
-    >
-      <NowPlayingView
-        :current-track="currentTrack"
-        :prev-track="prevTrack"
-        :next-track="nextTrack"
-        :is-playing="isPlaying"
-        :current-time="currentTime"
-        :duration="duration"
-        :is-shuffle="isShuffle"
-        :repeat-mode="repeatMode"
-        :is-liked="currentTrack ? likedIds.has(currentTrack.id) : false"
-        :sleep-label="sleepLabel"
-        :is-sleep-active="sleep.isActive.value"
-        :active-tab="activeTab"
-        :volume="volume"
-        :volume-supported="volumeSupported"
-        @back="activeTab = 'library'"
-        @open-queue="playlistOpen = true"
-        @open-sleep="sleepOpen = true"
-        @toggle-play="player.togglePlay()"
-        @toggle-shuffle="player.toggleShuffle()"
-        @cycle-repeat="player.cycleRepeat()"
-        @previous="player.previous()"
-        @next="player.next()"
-        @seek="player.seek"
-        @seek-by="player.seekBy"
-        @toggle-like="toggleLike"
-        @set-volume="setVolume"
-      />
-    </div>
+    <Transition name="sheet">
+      <div
+        v-show="activeTab === 'player'"
+        class="absolute inset-0 z-40 overflow-hidden"
+      >
+        <NowPlayingView
+          :current-track="currentTrack"
+          :prev-track="prevTrack"
+          :next-track="nextTrack"
+          :is-playing="isPlaying"
+          :current-time="currentTime"
+          :duration="duration"
+          :is-shuffle="isShuffle"
+          :repeat-mode="repeatMode"
+          :is-liked="currentTrack ? likedIds.has(currentTrack.id) : false"
+          :sleep-label="sleepLabel"
+          :is-sleep-active="sleep.isActive.value"
+          :active-tab="activeTab"
+          :volume="volume"
+          :volume-supported="volumeSupported"
+          @back="activeTab = 'library'"
+          @open-queue="playlistOpen = true"
+          @open-sleep="sleepOpen = true"
+          @toggle-play="player.togglePlay()"
+          @toggle-shuffle="player.toggleShuffle()"
+          @cycle-repeat="player.cycleRepeat()"
+          @previous="player.previous()"
+          @next="player.next()"
+          @seek="player.seek"
+          @seek-by="player.seekBy"
+          @toggle-like="toggleLike"
+          @set-volume="setVolume"
+        />
+      </div>
+    </Transition>
 
     <!-- ============================================================== -->
     <!-- DRAWERS & MODALS                                               -->
@@ -984,14 +994,16 @@ onBeforeUnmount(() => {
     />
 
     <!-- Live TV Cinema Player Modal -->
-    <LiveTvModal
-      v-if="activePlayingChannel"
-      :channel="activePlayingChannel"
-      :channels="filteredTvChannels"
-      @close="closeTvPlayer"
-      @select-channel="onPlayTvChannel"
-      @next="playNextTvChannel"
-      @prev="playPrevTvChannel"
-    />
+    <Transition name="cinema-fade">
+      <LiveTvModal
+        v-if="activePlayingChannel"
+        :channel="activePlayingChannel"
+        :channels="filteredTvChannels"
+        @close="closeTvPlayer"
+        @select-channel="onPlayTvChannel"
+        @next="playNextTvChannel"
+        @prev="playPrevTvChannel"
+      />
+    </Transition>
   </div>
 </template>

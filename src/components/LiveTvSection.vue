@@ -415,7 +415,7 @@ function toggleCountryGrid() {
     </div>
 
     <!-- Channel Grid -->
-    <div v-else class="space-y-2">
+    <TransitionGroup v-else name="media-list" tag="div" class="space-y-2">
       <div
         v-for="ch in channels"
         :key="ch.id"
@@ -543,6 +543,6 @@ function toggleCountryGrid() {
           </div>
         </div>
       </div>
-    </div>
+    </TransitionGroup>
   </div>
 </template>
