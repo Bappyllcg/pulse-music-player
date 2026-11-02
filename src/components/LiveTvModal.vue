@@ -59,6 +59,8 @@ const zappingScroll = useHorizontalScroll(zappingGuideContainerRef)
 
 // Glassmorphic Player UI state
 const areControlsVisible = ref(true)
+const isHoveringControls = ref(false)
+let isTouchInteracting = false
 let idleTimeout: number | undefined
 let lastTouchTime = 0
 const isMuted = ref(false)
@@ -97,17 +99,63 @@ const countryInfo = computed(() => {
   return reg ? `${reg.flag} ${reg.label}` : 'Live TV'
 })
 
-// Auto-hiding control bar timer
-function resetIdleTimer(): void {
+// Auto-hiding control bar timer: NEVER hides while hovering over any controller or exploring channels
+function resetIdleTimer(delay = 3500): void {
   areControlsVisible.value = true
   if (idleTimeout) {
     window.clearTimeout(idleTimeout)
     idleTimeout = undefined
   }
+  // If user is hovering over any controller or currently touching/exploring channels, do NOT schedule hide
+  if (isHoveringControls.value || isTouchInteracting) {
+    return
+  }
   if (isPlayingVideo.value) {
     idleTimeout = window.setTimeout(() => {
-      areControlsVisible.value = false
-    }, 3500)
+      if (!isHoveringControls.value && !isTouchInteracting) {
+        areControlsVisible.value = false
+      }
+    }, delay)
+  }
+}
+
+function onControlsMouseEnter(): void {
+  isHoveringControls.value = true
+  areControlsVisible.value = true
+  if (idleTimeout) {
+    window.clearTimeout(idleTimeout)
+    idleTimeout = undefined
+  }
+}
+
+function onControlsMouseLeave(): void {
+  isHoveringControls.value = false
+  resetIdleTimer(3500)
+}
+
+function onControlsTouchStart(): void {
+  isTouchInteracting = true
+  areControlsVisible.value = true
+  if (idleTimeout) {
+    window.clearTimeout(idleTimeout)
+    idleTimeout = undefined
+  }
+}
+
+function onControlsTouchEnd(): void {
+  isTouchInteracting = false
+  resetIdleTimer(5500)
+}
+
+function onChannelGuideScroll(): void {
+  areControlsVisible.value = true
+  if (isHoveringControls.value || isTouchInteracting) {
+    if (idleTimeout) {
+      window.clearTimeout(idleTimeout)
+      idleTimeout = undefined
+    }
+  } else {
+    resetIdleTimer(5500)
   }
 }
 
@@ -120,6 +168,13 @@ function onMouseMove(): void {
   if (Date.now() - lastTouchTime < 600) return
   if (!areControlsVisible.value) {
     areControlsVisible.value = true
+  }
+  if (isHoveringControls.value || isTouchInteracting) {
+    if (idleTimeout) {
+      window.clearTimeout(idleTimeout)
+      idleTimeout = undefined
+    }
+    return
   }
   resetIdleTimer()
 }
@@ -169,6 +224,8 @@ function cleanUpHls(): void {
   if (idleTimeout) window.clearTimeout(idleTimeout)
   if (zapBannerTimer) window.clearTimeout(zapBannerTimer)
   if (centerActionTimer) window.clearTimeout(centerActionTimer)
+  isHoveringControls.value = false
+  isTouchInteracting = false
   if (statsInterval) {
     window.clearInterval(statsInterval)
     statsInterval = undefined
@@ -216,6 +273,10 @@ function togglePlayPause(): void {
     isPlayingVideo.value = false
     triggerCenterAction('pause')
     areControlsVisible.value = true
+    if (idleTimeout) {
+      window.clearTimeout(idleTimeout)
+      idleTimeout = undefined
+    }
   }
 }
 
@@ -225,6 +286,8 @@ function toggleControls(): void {
     resetIdleTimer()
   } else {
     areControlsVisible.value = false
+    isHoveringControls.value = false
+    isTouchInteracting = false
     if (idleTimeout) {
       window.clearTimeout(idleTimeout)
       idleTimeout = undefined
@@ -670,8 +733,11 @@ onBeforeUnmount(() => {
       class="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.6rem)] bg-gradient-to-b from-black/95 via-black/70 to-transparent transition-opacity duration-300"
       :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none invisible'"
       @click.stop
-      @touchstart="resetIdleTimer"
-      @mousemove="resetIdleTimer"
+      @mouseenter="onControlsMouseEnter"
+      @mouseleave="onControlsMouseLeave"
+      @touchstart="onControlsTouchStart"
+      @touchend="onControlsTouchEnd"
+      @mousemove="onControlsMouseEnter"
     >
       <!-- Channel Identity -->
       <div class="flex items-center gap-3 min-w-0 flex-1 pr-3">
@@ -805,6 +871,10 @@ onBeforeUnmount(() => {
           class="absolute z-20 flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md ring-1 ring-white/25 shadow-2xl active:scale-90 transition hover:bg-black/80 hover:scale-105 cursor-pointer"
           :title="isPlayingVideo ? 'Pause' : 'Play'"
           @click.stop="togglePlayPause"
+          @mouseenter="onControlsMouseEnter"
+          @mouseleave="onControlsMouseLeave"
+          @touchstart="onControlsTouchStart"
+          @touchend="onControlsTouchEnd"
         >
           <Pause v-if="isPlayingVideo" :size="30" fill="currentColor" />
           <Play v-else :size="30" fill="currentColor" class="translate-x-0.5" />
@@ -863,6 +933,10 @@ onBeforeUnmount(() => {
         v-if="showStatsHud"
         class="absolute top-16 right-6 z-20 w-56 rounded-2xl bg-zinc-950/90 p-3 text-[11px] ring-1 ring-indigo-500/40 backdrop-blur-xl shadow-2xl font-mono text-zinc-300 pointer-events-auto"
         @click.stop
+        @mouseenter="onControlsMouseEnter"
+        @mouseleave="onControlsMouseLeave"
+        @touchstart="onControlsTouchStart"
+        @touchend="onControlsTouchEnd"
       >
         <div class="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2 font-sans font-bold text-white">
           <span class="flex items-center gap-1.5 text-indigo-400">
@@ -959,6 +1033,10 @@ onBeforeUnmount(() => {
         :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none invisible'"
         title="Previous Channel (Left Arrow)"
         @click.stop="emit('prev')"
+        @mouseenter="onControlsMouseEnter"
+        @mouseleave="onControlsMouseLeave"
+        @touchstart="onControlsTouchStart"
+        @touchend="onControlsTouchEnd"
       >
         <ChevronLeft :size="24" />
       </button>
@@ -969,6 +1047,10 @@ onBeforeUnmount(() => {
         :class="areControlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none invisible'"
         title="Next Channel (Right Arrow)"
         @click.stop="emit('next')"
+        @mouseenter="onControlsMouseEnter"
+        @mouseleave="onControlsMouseLeave"
+        @touchstart="onControlsTouchStart"
+        @touchend="onControlsTouchEnd"
       >
         <ChevronRight :size="24" />
       </button>
@@ -979,8 +1061,11 @@ onBeforeUnmount(() => {
       class="absolute bottom-0 inset-x-0 z-30 flex flex-col transition-all duration-300"
       :class="areControlsVisible || !isPlayingVideo || streamError ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none invisible'"
       @click.stop
-      @touchstart="resetIdleTimer"
-      @mousemove="resetIdleTimer"
+      @mouseenter="onControlsMouseEnter"
+      @mouseleave="onControlsMouseLeave"
+      @touchstart="onControlsTouchStart"
+      @touchend="onControlsTouchEnd"
+      @mousemove="onControlsMouseEnter"
     >
       <!-- 1. Channel Zapping Bar: Elevated safely ABOVE the bottom controls, zero conflict with phone home bar -->
       <transition
@@ -1038,6 +1123,7 @@ onBeforeUnmount(() => {
           <div
             ref="zappingGuideContainerRef"
             class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 scroll-smooth select-none cursor-grab active:cursor-grabbing"
+            @scroll.passive="onChannelGuideScroll"
           >
             <button
               v-for="ch in channels"
