@@ -657,7 +657,6 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="fixed inset-0 flex w-full flex-col overflow-hidden bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 app-viewport antialiased select-none font-sans"
-    style="height: var(--app-height, 100%);"
   >
     <!-- Hidden native file picker -->
     <input
@@ -770,8 +769,8 @@ onBeforeUnmount(() => {
         class="flex-1 overflow-y-auto px-5"
         :class="[
           currentTrack && activeMainTab !== 'tv' && !activePlayingChannel
-            ? 'pb-24'
-            : 'pb-4'
+            ? 'pb-[calc(max(env(safe-area-inset-bottom,0px),10px)+7.75rem)]'
+            : 'pb-[calc(max(env(safe-area-inset-bottom,0px),10px)+4.5rem)]'
         ]"
       >
         <!-- 1. Library Pillar -->

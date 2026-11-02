@@ -10,8 +10,20 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Pulse" />
-    <meta name="theme-color" content="#09090b" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f4f8" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08080c" />
+    <meta name="theme-color" content="#08080c" />
     <meta name="color-scheme" content="light dark" />
+    <style>
+      html, body {
+        background-color: #08080c;
+        margin: 0;
+        padding: 0;
+      }
+      html.light, html.light body {
+        background-color: #f4f4f8;
+      }
+    </style>
     <script>
       try {
         var t = localStorage.getItem('pulse:theme') || 'system';
@@ -37,7 +49,7 @@
     />
     <title>Pulse Player</title>
   </head>
-  <body class="bg-[#09090b] text-zinc-100 dark:bg-[#09090b] dark:text-zinc-100">
+  <body class="bg-slate-50 text-slate-900 dark:bg-[#08080c] dark:text-zinc-100">
     <div id="app"></div>
     <noscript>Pulse Player requires JavaScript.</noscript>
     <script type="module" src="/src/main.ts"></script>
