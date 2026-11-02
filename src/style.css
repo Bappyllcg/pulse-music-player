@@ -63,14 +63,24 @@ html,
 body,
 #app {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   width: 100%;
-  height: 100%;
-  height: 100dvh;
-  height: -webkit-fill-available;
+  /* --app-height is measured in main.ts to work around the iOS standalone short-viewport bug */
+  height: var(--app-height, 100%);
   overflow: hidden;
   margin: 0;
   padding: 0;
+}
+
+/* Safety net: anything below the app shell (iOS home-indicator strip) matches the dock color */
+html {
+  background-color: #0c0c14;
+}
+
+html.light {
+  background-color: #ffffff;
 }
 
 html,
@@ -162,7 +172,11 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 /* Light Theme Overrides for Core Glass Containers */
-html.light body,
+html.light body {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
 html.light .app-viewport {
   background-color: #f4f4f8 !important;
   color: #0f172a !important;

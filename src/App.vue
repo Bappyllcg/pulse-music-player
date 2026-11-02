@@ -657,7 +657,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="fixed inset-0 flex w-full flex-col overflow-hidden bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 app-viewport antialiased select-none font-sans"
-    style="height: 100%; height: 100dvh; height: -webkit-fill-available;"
+    style="height: var(--app-height, 100%);"
   >
     <!-- Hidden native file picker -->
     <input
