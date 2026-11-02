@@ -8,21 +8,22 @@ import {
   RefreshCw,
 } from 'lucide-vue-next'
 
-import AboutModal from './components/AboutModal.vue'
 import BottomNavDock, { type MainNavTab } from './components/BottomNavDock.vue'
 import DiscoverSection from './components/DiscoverSection.vue'
 import LiveRadioSection from './components/LiveRadioSection.vue'
 import LiveTvSection from './components/LiveTvSection.vue'
-
-const LiveTvModal = defineAsyncComponent(() => import('./components/LiveTvModal.vue'))
 import MiniPlayerBar from './components/MiniPlayerBar.vue'
 import NowPlayingView from './components/NowPlayingView.vue'
-import RemoveConfirmModal from './components/RemoveConfirmModal.vue'
-import SettingsModal from './components/SettingsModal.vue'
-import SideMenuDrawer from './components/SideMenuDrawer.vue'
-import SleepTimerDrawer from './components/SleepTimerDrawer.vue'
 import TrackList, { type LibraryFilter } from './components/TrackList.vue'
-import UpNextDrawer from './components/UpNextDrawer.vue'
+
+// Async-loaded modals & drawers (split from critical path to minimize initial JS payload)
+const LiveTvModal = defineAsyncComponent(() => import('./components/LiveTvModal.vue'))
+const AboutModal = defineAsyncComponent(() => import('./components/AboutModal.vue'))
+const SettingsModal = defineAsyncComponent(() => import('./components/SettingsModal.vue'))
+const SideMenuDrawer = defineAsyncComponent(() => import('./components/SideMenuDrawer.vue'))
+const SleepTimerDrawer = defineAsyncComponent(() => import('./components/SleepTimerDrawer.vue'))
+const UpNextDrawer = defineAsyncComponent(() => import('./components/UpNextDrawer.vue'))
+const RemoveConfirmModal = defineAsyncComponent(() => import('./components/RemoveConfirmModal.vue'))
 
 import { useAudioStorage } from './composables/useAudioStorage'
 import { useLiveTv, type TvCategoryId, type TvRegionId } from './composables/useLiveTv'
@@ -150,34 +151,50 @@ watch(currentRadioSearch, (newQuery) => {
 /* Navigation Handlers                                                */
 /* ------------------------------------------------------------------ */
 
+let tabHealthCheckTimer: number | undefined
+
 function switchMainTab(tab: MainNavTab): void {
   activeMainTab.value = tab
+  window.clearTimeout(tabHealthCheckTimer)
+
   if (tab === 'discover' && onlineTracks.value.length === 0) {
     void selectGenre(activeGenreId.value)
   } else if (tab === 'radio') {
     if (radioStations.value.length === 0) {
       void selectRadioRegion('bd')
     } else {
-      void runRadioHealthCheck(filteredRadioStations.value)
+      // Defer health check slightly so tab entrance crossfade is 100% stutter-free
+      tabHealthCheckTimer = window.setTimeout(() => {
+        void runRadioHealthCheck(filteredRadioStations.value)
+      }, 260)
     }
   } else if (tab === 'tv') {
     if (tvChannels.value.length === 0) {
       void selectTvRegion('bd')
     } else {
-      void runBackgroundHealthCheck(filteredTvChannels.value)
+      // Defer health check slightly so tab entrance crossfade is 100% stutter-free
+      tabHealthCheckTimer = window.setTimeout(() => {
+        void runBackgroundHealthCheck(filteredTvChannels.value)
+      }, 260)
     }
   }
 }
 
 watch([activeRadioRegion, activeRadioCategory], () => {
   if (activeMainTab.value === 'radio' && filteredRadioStations.value.length > 0) {
-    void runRadioHealthCheck(filteredRadioStations.value)
+    window.clearTimeout(tabHealthCheckTimer)
+    tabHealthCheckTimer = window.setTimeout(() => {
+      void runRadioHealthCheck(filteredRadioStations.value)
+    }, 200)
   }
 })
 
 watch([activeTvRegion, activeTvCategory], () => {
   if (activeMainTab.value === 'tv' && filteredTvChannels.value.length > 0) {
-    void runBackgroundHealthCheck(filteredTvChannels.value)
+    window.clearTimeout(tabHealthCheckTimer)
+    tabHealthCheckTimer = window.setTimeout(() => {
+      void runBackgroundHealthCheck(filteredTvChannels.value)
+    }, 200)
   }
 })
 
@@ -651,6 +668,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(noticeTimer)
   window.clearTimeout(discoverDebounceTimer)
   window.clearTimeout(radioDebounceTimer)
+  window.clearTimeout(tabHealthCheckTimer)
 })
 </script>
 
@@ -660,6 +678,8 @@ onBeforeUnmount(() => {
   >
     <!-- Hidden native file picker -->
     <input
+      id="native-audio-file-input"
+      name="nativeAudioFiles"
       ref="fileInput"
       type="file"
       accept="audio/*,.mp3,.m4a,.aac,.wav,.wave,.ogg,.oga,.flac"
@@ -767,101 +787,96 @@ onBeforeUnmount(() => {
       <!-- Scrollable content area: Fills all middle space -->
       <main class="flex-1 min-h-0 w-full overflow-y-auto px-5 pb-4">
         <Transition name="tab-crossfade" mode="out-in">
-          <!-- 1. Library Pillar -->
-          <TrackList
-            v-if="activeMainTab === 'library'"
-            key="library"
-            :tracks="filteredLibraryTracks"
-            :current-track="currentTrack"
-            :is-playing="isPlaying"
-            :liked-ids="likedIds"
-            :is-importing="isImporting"
-            :selected-filter="selectedLibraryFilter"
-            :search-query="librarySearch"
-            @update:search-query="librarySearch = $event"
-            @select-filter="selectedLibraryFilter = $event"
-            @play-track="playTrackAndShow"
-            @toggle-playback="toggleTrackPlayback"
-            @toggle-like="toggleLike"
-            @remove-track="promptRemoveTrack"
-            @open-file-picker="openFilePicker"
-            @drop-files="importFiles"
-            @shuffle-all="shuffleAllLibrary"
-            @switch-to-discover="switchMainTab('discover')"
-          />
-
-          <!-- 2. Discover Pillar (Jamendo Online Music) -->
-          <DiscoverSection
-            v-else-if="activeMainTab === 'discover'"
-            key="discover"
-            :genres="onlineGenres"
-            :active-genre-id="activeGenreId"
-            :tracks="onlineTracks"
-            :current-track="currentTrack"
-            :is-playing="isPlaying"
-            :is-loading="isLoadingOnline"
-            :error="onlineError"
-            :search-query="discoverSearch"
-            :liked-ids="likedIds"
-            @update:search-query="discoverSearch = $event"
-            @select-genre="onSelectGenre"
-            @play-track="playTrackAndShow"
-            @toggle-playback="toggleTrackPlayback"
-            @toggle-like="toggleLike"
-            @retry="fetchOnlineTracks(true)"
-          />
-
-          <!-- 3. Live Radio Pillar -->
-          <LiveRadioSection
-            v-else-if="activeMainTab === 'radio'"
-            key="radio"
-            :regions="radioRegions"
-            :categories="radioCategories"
-            :active-region="activeRadioRegion"
-            :active-category="activeRadioCategory"
-            :stations="filteredRadioStations"
-            :current-track="currentTrack"
-            :is-playing="isPlaying"
-            :is-loading="isLoadingRadio"
-            :error="radioError"
-            :active-label="activeRadioLabel"
-            :search-query="currentRadioSearch"
-            :liked-ids="likedIds"
-            :get-station-status="getRadioStationStatus"
-            :get-station-latency="getRadioStationLatency"
-            :get-network-strength="getRadioNetworkStrength"
-            @update:search-query="currentRadioSearch = $event"
-            @select-region="onSelectRadioRegion"
-            @select-category="onSelectRadioCategory"
-            @refresh="fetchRadioStations(true)"
-            @play-station="playTrackAndShow"
-            @toggle-playback="toggleTrackPlayback"
-            @toggle-like="toggleLike"
-          />
-
-          <!-- 4. Live TV Pillar -->
-          <LiveTvSection
-            v-else-if="activeMainTab === 'tv'"
-            key="tv"
-            :regions="tvRegions"
-            :categories="tvCategories"
-            :active-region="activeTvRegion"
-            :active-category="activeTvCategory"
-            :channels="filteredTvChannels"
-            :active-playing-channel="activePlayingChannel"
-            :is-loading="isLoadingTv"
-            :error="tvError"
-            :active-label="activeTvLabel"
-            :search-query="currentTvSearch"
-            :get-channel-status="getTvChannelStatus"
-            :get-channel-latency="getTvChannelLatency"
-            :get-network-strength="getTvNetworkStrength"
-            @update:search-query="currentTvSearch = $event"
-            @select-region="onSelectTvRegion"
-            @select-category="onSelectTvCategory"
-            @refresh="selectTvRegion(activeTvRegion, true)"
-            @play-channel="onPlayTvChannel"
-          />
+          <KeepAlive>
+            <TrackList
+              v-if="activeMainTab === 'library'"
+              key="library"
+              :tracks="filteredLibraryTracks"
+              :current-track="currentTrack"
+              :is-playing="isPlaying"
+              :liked-ids="likedIds"
+              :is-importing="isImporting"
+              :selected-filter="selectedLibraryFilter"
+              :search-query="librarySearch"
+              @update:search-query="librarySearch = $event"
+              @select-filter="selectedLibraryFilter = $event"
+              @play-track="playTrackAndShow"
+              @toggle-playback="toggleTrackPlayback"
+              @toggle-like="toggleLike"
+              @remove-track="promptRemoveTrack"
+              @open-file-picker="openFilePicker"
+              @drop-files="importFiles"
+              @shuffle-all="shuffleAllLibrary"
+              @switch-to-discover="switchMainTab('discover')"
+            />
+            <DiscoverSection
+              v-else-if="activeMainTab === 'discover'"
+              key="discover"
+              :genres="onlineGenres"
+              :active-genre-id="activeGenreId"
+              :tracks="onlineTracks"
+              :current-track="currentTrack"
+              :is-playing="isPlaying"
+              :is-loading="isLoadingOnline"
+              :error="onlineError"
+              :search-query="discoverSearch"
+              :liked-ids="likedIds"
+              @update:search-query="discoverSearch = $event"
+              @select-genre="onSelectGenre"
+              @play-track="playTrackAndShow"
+              @toggle-playback="toggleTrackPlayback"
+              @toggle-like="toggleLike"
+              @retry="fetchOnlineTracks(true)"
+            />
+            <LiveRadioSection
+              v-else-if="activeMainTab === 'radio'"
+              key="radio"
+              :regions="radioRegions"
+              :categories="radioCategories"
+              :active-region="activeRadioRegion"
+              :active-category="activeRadioCategory"
+              :stations="filteredRadioStations"
+              :current-track="currentTrack"
+              :is-playing="isPlaying"
+              :is-loading="isLoadingRadio"
+              :error="radioError"
+              :active-label="activeRadioLabel"
+              :search-query="currentRadioSearch"
+              :liked-ids="likedIds"
+              :get-station-status="getRadioStationStatus"
+              :get-station-latency="getRadioStationLatency"
+              :get-network-strength="getRadioNetworkStrength"
+              @update:search-query="currentRadioSearch = $event"
+              @select-region="onSelectRadioRegion"
+              @select-category="onSelectRadioCategory"
+              @refresh="fetchRadioStations(true)"
+              @play-station="playTrackAndShow"
+              @toggle-playback="toggleTrackPlayback"
+              @toggle-like="toggleLike"
+            />
+            <LiveTvSection
+              v-else-if="activeMainTab === 'tv'"
+              key="tv"
+              :regions="tvRegions"
+              :categories="tvCategories"
+              :active-region="activeTvRegion"
+              :active-category="activeTvCategory"
+              :channels="filteredTvChannels"
+              :active-playing-channel="activePlayingChannel"
+              :is-loading="isLoadingTv"
+              :error="tvError"
+              :active-label="activeTvLabel"
+              :search-query="currentTvSearch"
+              :get-channel-status="getTvChannelStatus"
+              :get-channel-latency="getTvChannelLatency"
+              :get-network-strength="getTvNetworkStrength"
+              @update:search-query="currentTvSearch = $event"
+              @select-region="onSelectTvRegion"
+              @select-category="onSelectTvCategory"
+              @refresh="selectTvRegion(activeTvRegion, true)"
+              @play-channel="onPlayTvChannel"
+            />
+          </KeepAlive>
         </Transition>
       </main>
 

@@ -159,14 +159,26 @@ function usePlayerInternals() {
   function persistCurrentState(force = false): void {
     if (!currentTrack.value) return
     const now = Date.now()
-    if (!force && now - lastPersistAt < 2500) return
+    // Non-forced periodic persistence runs at most every 15s deferred to idle time
+    if (!force && now - lastPersistAt < 15000) return
     lastPersistAt = now
     const isLiveRadio = currentTrack.value.id.startsWith('radio') || (currentTrack.value.kind === 'stream' && currentTrack.value.duration <= 0)
-    saveStoredState({
-      lastTrackId: currentTrack.value.id,
-      lastPosition: isLiveRadio ? 0 : currentTime.value,
-      lastStreamTrack: currentTrack.value.kind === 'stream' ? currentTrack.value : null,
-    })
+
+    const doPersist = () => {
+      saveStoredState({
+        lastTrackId: currentTrack.value?.id ?? null,
+        lastPosition: isLiveRadio ? 0 : currentTime.value,
+        lastStreamTrack: currentTrack.value?.kind === 'stream' ? currentTrack.value : null,
+      })
+    }
+
+    if (force) {
+      doPersist()
+    } else if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      window.requestIdleCallback(doPersist, { timeout: 2000 })
+    } else {
+      setTimeout(doPersist, 0)
+    }
   }
 
   function setQueue(newList: PlayableTrack[] | null): void {
@@ -177,11 +189,15 @@ function usePlayerInternals() {
   /* ---------------------------- Media Session --------------------------- */
 
   const mediaSession: MediaSession | null = 'mediaSession' in navigator ? navigator.mediaSession : null
+  let lastPositionUpdateSec = -1
 
   function updatePositionState(): void {
     if (!mediaSession || typeof mediaSession.setPositionState !== 'function') return
     const total = audio.duration
     if (!Number.isFinite(total) || total <= 0) return
+    const currentSec = Math.floor(audio.currentTime)
+    if (currentSec === lastPositionUpdateSec) return
+    lastPositionUpdateSec = currentSec
     try {
       mediaSession.setPositionState({
         duration: total,

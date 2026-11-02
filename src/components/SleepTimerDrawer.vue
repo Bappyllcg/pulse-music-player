@@ -19,30 +19,56 @@ const emit = defineEmits<{
   (e: 'turnOff'): void
 }>()
 
-/* Swipe-to-Dismiss Gesture */
-const sleepDragOffset = ref(0)
-const isDraggingSleep = ref(false)
+/* Swipe-to-Dismiss Gesture (RAF-decoupled for 120fps) */
+const asideRef = ref<HTMLElement | null>(null)
+let isDraggingSleep = false
 let touchStartYSleep = 0
+let currentTouchYSleep = 0
+let rAFIdSleep: number | null = null
+
+function applySleepTransform(): void {
+  if (!asideRef.value) return
+  const deltaY = Math.max(0, currentTouchYSleep - touchStartYSleep)
+  if (deltaY > 0) {
+    asideRef.value.style.transform = `translate3d(0, ${deltaY}px, 0)`
+    asideRef.value.style.transition = 'none'
+  } else {
+    asideRef.value.style.transform = ''
+    asideRef.value.style.transition = ''
+  }
+  rAFIdSleep = null
+}
 
 function onSleepTouchStart(e: TouchEvent): void {
   touchStartYSleep = e.touches[0].clientY
-  isDraggingSleep.value = true
+  currentTouchYSleep = touchStartYSleep
+  isDraggingSleep = true
 }
 
 function onSleepTouchMove(e: TouchEvent): void {
-  if (!isDraggingSleep.value) return
-  const deltaY = e.touches[0].clientY - touchStartYSleep
-  sleepDragOffset.value = deltaY > 0 ? deltaY : 0
+  if (!isDraggingSleep) return
+  currentTouchYSleep = e.touches[0].clientY
+  if (rAFIdSleep === null) {
+    rAFIdSleep = requestAnimationFrame(applySleepTransform)
+  }
 }
 
 function onSleepTouchEnd(): void {
-  if (!isDraggingSleep.value) return
-  isDraggingSleep.value = false
-  if (sleepDragOffset.value > 80) {
+  if (!isDraggingSleep) return
+  isDraggingSleep = false
+  if (rAFIdSleep !== null) {
+    cancelAnimationFrame(rAFIdSleep)
+    rAFIdSleep = null
+  }
+  const deltaY = currentTouchYSleep - touchStartYSleep
+  if (asideRef.value) {
+    asideRef.value.style.transition = ''
+    asideRef.value.style.transform = ''
+  }
+  if (deltaY > 80) {
     emit('close')
     emit('update:open', false)
   }
-  sleepDragOffset.value = 0
 }
 </script>
 
@@ -58,17 +84,17 @@ function onSleepTouchEnd(): void {
 
     <!-- Sleep Timer Drawer Sheet -->
     <aside
-      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] border pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out
+      ref="asideRef"
+      class="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2.5rem] border pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out will-change-transform
              bg-white border-slate-200 text-slate-900
              dark:bg-zinc-900/95 dark:border-white/15 dark:text-zinc-100"
       :class="open ? 'translate-y-0' : 'translate-y-full'"
-      :style="sleepDragOffset > 0 ? { transform: `translateY(${sleepDragOffset}px)`, transition: 'none' } : {}"
       :inert="open ? undefined : true"
       role="dialog"
       aria-modal="true"
       aria-labelledby="sleep-timer-title"
-      @touchstart="onSleepTouchStart"
-      @touchmove="onSleepTouchMove"
+      @touchstart.passive="onSleepTouchStart"
+      @touchmove.passive="onSleepTouchMove"
       @touchend="onSleepTouchEnd"
     >
       <!-- Drag Handle -->

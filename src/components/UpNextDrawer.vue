@@ -24,36 +24,62 @@ const emit = defineEmits<{
   (e: 'discoverOnline'): void
 }>()
 
-/* Swipe-to-Dismiss Gesture */
-const playlistDragOffset = ref(0)
-const isDraggingPlaylist = ref(false)
+/* Swipe-to-Dismiss Gesture (RAF-decoupled for 120fps) */
+const asideRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
+let isDraggingPlaylist = false
 let touchStartYPlaylist = 0
+let currentTouchYPlaylist = 0
+let rAFIdPlaylist: number | null = null
+
+function applyPlaylistTransform(): void {
+  if (!asideRef.value) return
+  const deltaY = Math.max(0, currentTouchYPlaylist - touchStartYPlaylist)
+  if (deltaY > 0) {
+    asideRef.value.style.transform = `translate3d(0, ${deltaY}px, 0)`
+    asideRef.value.style.transition = 'none'
+  } else {
+    asideRef.value.style.transform = ''
+    asideRef.value.style.transition = ''
+  }
+  rAFIdPlaylist = null
+}
 
 function onPlaylistTouchStart(e: TouchEvent): void {
   const target = e.target as Node | null
   if (queueListRef.value && target && queueListRef.value.contains(target) && queueListRef.value.scrollTop > 0) {
-    isDraggingPlaylist.value = false
+    isDraggingPlaylist = false
     return
   }
   touchStartYPlaylist = e.touches[0].clientY
-  isDraggingPlaylist.value = true
+  currentTouchYPlaylist = touchStartYPlaylist
+  isDraggingPlaylist = true
 }
 
 function onPlaylistTouchMove(e: TouchEvent): void {
-  if (!isDraggingPlaylist.value) return
-  const deltaY = e.touches[0].clientY - touchStartYPlaylist
-  playlistDragOffset.value = deltaY > 0 ? deltaY : 0
+  if (!isDraggingPlaylist) return
+  currentTouchYPlaylist = e.touches[0].clientY
+  if (rAFIdPlaylist === null) {
+    rAFIdPlaylist = requestAnimationFrame(applyPlaylistTransform)
+  }
 }
 
 function onPlaylistTouchEnd(): void {
-  if (!isDraggingPlaylist.value) return
-  isDraggingPlaylist.value = false
-  if (playlistDragOffset.value > 80) {
+  if (!isDraggingPlaylist) return
+  isDraggingPlaylist = false
+  if (rAFIdPlaylist !== null) {
+    cancelAnimationFrame(rAFIdPlaylist)
+    rAFIdPlaylist = null
+  }
+  const deltaY = currentTouchYPlaylist - touchStartYPlaylist
+  if (asideRef.value) {
+    asideRef.value.style.transition = ''
+    asideRef.value.style.transform = ''
+  }
+  if (deltaY > 80) {
     emit('close')
     emit('update:open', false)
   }
-  playlistDragOffset.value = 0
 }
 
 function formatTrackDuration(seconds: number): string {
@@ -80,13 +106,14 @@ const totalQueueTime = computed(() => {
       @click="emit('close'); emit('update:open', false)"></div>
 
     <!-- Up Next Queue Drawer Sheet -->
-    <aside class="fixed inset-x-0 bottom-0 z-50 flex h-[80dvh] flex-col rounded-t-[2.5rem] border pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out
+    <aside
+      ref="asideRef"
+      class="fixed inset-x-0 bottom-0 z-50 flex h-[80dvh] flex-col rounded-t-[2.5rem] border pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out will-change-transform
              bg-white border-slate-200 text-slate-900
              dark:bg-zinc-900/95 dark:border-white/15 dark:text-zinc-100"
       :class="open ? 'translate-y-0' : 'translate-y-full'"
-      :style="playlistDragOffset > 0 ? { transform: `translateY(${playlistDragOffset}px)`, transition: 'none' } : {}"
       :inert="open ? undefined : true" role="dialog" aria-modal="true" aria-labelledby="upnext-queue-title"
-      @touchstart="onPlaylistTouchStart" @touchmove="onPlaylistTouchMove" @touchend="onPlaylistTouchEnd">
+      @touchstart.passive="onPlaylistTouchStart" @touchmove.passive="onPlaylistTouchMove" @touchend="onPlaylistTouchEnd">
       <!-- Drag Handle -->
       <div class="flex justify-center pt-3 pb-1 cursor-grab">
         <div

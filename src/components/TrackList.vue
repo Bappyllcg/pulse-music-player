@@ -149,6 +149,8 @@ function onDrop(e: DragEvent): void {
       >
         <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
+          id="library-search-input"
+          name="librarySearch"
           :value="searchQuery"
           type="search"
           placeholder="Filter library songs or artists..."
@@ -260,7 +262,7 @@ function onDrop(e: DragEvent): void {
     <!-- Track List -->
     <TransitionGroup v-else name="media-list" tag="div" class="space-y-2">
       <div v-for="track in tracks" :key="track.id"
-        class="group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
+        class="media-card-item group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
         :class="currentTrack?.id === track.id
           ? 'bg-indigo-50/90 border-indigo-200 shadow-sm dark:bg-indigo-950/40 dark:border-indigo-500/40 dark:shadow-indigo-950/20'
           : 'bg-white/90 border-slate-200/80 shadow-sm hover:bg-white hover:border-slate-300 dark:bg-zinc-900/50 dark:border-white/[0.06] dark:hover:bg-zinc-800/60 dark:hover:border-white/[0.12]'
@@ -275,7 +277,7 @@ function onDrop(e: DragEvent): void {
             <Disc v-else :size="24" class="text-slate-400 dark:text-zinc-500" />
 
             <div v-if="currentTrack?.id === track.id && isPlaying"
-              class="absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[1px]">
+              class="absolute inset-0 flex items-center justify-center bg-black/60">
               <span v-for="n in 3" :key="n" class="animate-eq mx-[1px] h-3.5 w-0.5 rounded-full bg-indigo-400"
                 :style="{ animationDelay: `${n * 0.15}s` }"></span>
             </div>

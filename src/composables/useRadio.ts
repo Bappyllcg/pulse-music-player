@@ -470,6 +470,7 @@ export async function checkStationHealth(
   try {
     const res = await fetch(sanitized, {
       method: 'GET',
+      headers: { Range: 'bytes=0-0' },
       signal: controller.signal,
     })
 
@@ -528,7 +529,7 @@ let latestRadioRequestId = 0
 
 export async function runBackgroundHealthCheck(
   targetStations: RadioStation[],
-  concurrency = 8,
+  concurrency = 4,
 ): Promise<void> {
   if (!targetStations || targetStations.length === 0) return
 

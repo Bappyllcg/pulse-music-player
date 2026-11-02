@@ -54,12 +54,38 @@ export default defineConfig({
               },
             },
           },
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|webp|ico)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'pulse-media-artwork',
+              expiration: {
+                maxEntries: 150,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
         ],
       },
     }),
   ],
   build: {
     chunkSizeWarningLimit: 650,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/vue/')) {
+            return 'vendor-vue'
+          }
+          if (id.includes('node_modules/lucide-vue-next/')) {
+            return 'vendor-icons'
+          }
+        },
+      },
+    },
   },
 })
 

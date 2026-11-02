@@ -41,6 +41,8 @@ export function useHorizontalScroll(containerRef: Ref<HTMLElement | null>) {
     dragMoved = false
     startX = e.pageX - el.offsetLeft
     scrollStartX = el.scrollLeft
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
   }
 
   function onMouseMove(e: MouseEvent) {
@@ -58,6 +60,8 @@ export function useHorizontalScroll(containerRef: Ref<HTMLElement | null>) {
   }
 
   function onMouseUp() {
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
     if (!isDragging.value) return
     isDragging.value = false
     // Keep dragMoved true for 80ms so subsequent click event knows it was a drag gesture
@@ -136,9 +140,6 @@ export function useHorizontalScroll(containerRef: Ref<HTMLElement | null>) {
       resizeObserver = null
     }
   }
-
-  window.addEventListener('mouseup', onMouseUp)
-  window.addEventListener('mousemove', onMouseMove)
 
   watch(
     containerRef,

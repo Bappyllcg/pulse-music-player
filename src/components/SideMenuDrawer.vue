@@ -28,31 +28,56 @@ const emit = defineEmits<{
   (e: 'openSettings'): void
 }>()
 
-/* Swipe-to-Dismiss Gesture */
-const menuDragOffset = ref(0)
-const isDraggingMenu = ref(false)
+/* Swipe-to-Dismiss Gesture (RAF-decoupled for 120fps) */
+const asideRef = ref<HTMLElement | null>(null)
+let isDraggingMenu = false
 let touchStartXMenu = 0
+let currentTouchXMenu = 0
+let rAFIdMenu: number | null = null
+
+function applyMenuTransform(): void {
+  if (!asideRef.value) return
+  const deltaX = Math.max(0, currentTouchXMenu - touchStartXMenu)
+  if (deltaX > 0) {
+    asideRef.value.style.transform = `translate3d(${deltaX}px, 0, 0)`
+    asideRef.value.style.transition = 'none'
+  } else {
+    asideRef.value.style.transform = ''
+    asideRef.value.style.transition = ''
+  }
+  rAFIdMenu = null
+}
 
 function onMenuTouchStart(e: TouchEvent): void {
   touchStartXMenu = e.touches[0].clientX
-  isDraggingMenu.value = true
+  currentTouchXMenu = touchStartXMenu
+  isDraggingMenu = true
 }
 
 function onMenuTouchMove(e: TouchEvent): void {
-  if (!isDraggingMenu.value) return
-  const deltaX = e.touches[0].clientX - touchStartXMenu
-  // Only allow dragging to the right (closing direction)
-  menuDragOffset.value = deltaX > 0 ? deltaX : 0
+  if (!isDraggingMenu) return
+  currentTouchXMenu = e.touches[0].clientX
+  if (rAFIdMenu === null) {
+    rAFIdMenu = requestAnimationFrame(applyMenuTransform)
+  }
 }
 
 function onMenuTouchEnd(): void {
-  if (!isDraggingMenu.value) return
-  isDraggingMenu.value = false
-  if (menuDragOffset.value > 70) {
+  if (!isDraggingMenu) return
+  isDraggingMenu = false
+  if (rAFIdMenu !== null) {
+    cancelAnimationFrame(rAFIdMenu)
+    rAFIdMenu = null
+  }
+  const deltaX = currentTouchXMenu - touchStartXMenu
+  if (asideRef.value) {
+    asideRef.value.style.transition = ''
+    asideRef.value.style.transform = ''
+  }
+  if (deltaX > 70) {
     emit('close')
     emit('update:open', false)
   }
-  menuDragOffset.value = 0
 }
 
 function onNavigate(tab: MainNavTab): void {
@@ -86,16 +111,16 @@ function onOpenSettings(): void {
 
     <!-- Side Push Drawer -->
     <aside
-      class="fixed inset-y-0 right-0 z-50 flex w-80 max-w-[85vw] flex-col justify-between pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out border-l
+      ref="asideRef"
+      class="fixed inset-y-0 right-0 z-50 flex w-80 max-w-[85vw] flex-col justify-between pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out border-l will-change-transform
              bg-white border-slate-200 text-slate-900
              dark:bg-zinc-900/95 dark:border-white/10 dark:text-zinc-100"
       :class="open ? 'translate-x-0' : 'translate-x-full'"
-      :style="menuDragOffset > 0 ? { transform: `translateX(${menuDragOffset}px)`, transition: 'none' } : {}"
       :inert="open ? undefined : true"
       role="dialog"
       aria-label="Navigation and options menu"
-      @touchstart="onMenuTouchStart"
-      @touchmove="onMenuTouchMove"
+      @touchstart.passive="onMenuTouchStart"
+      @touchmove.passive="onMenuTouchMove"
       @touchend="onMenuTouchEnd"
     >
       <!-- Top Header -->

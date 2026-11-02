@@ -43,7 +43,7 @@ const emit = defineEmits<{
             />
             <div
               v-if="isPlaying"
-              class="absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[0.5px]"
+              class="absolute inset-0 flex items-center justify-center bg-black/60"
             >
               <span
                 v-for="n in 3"

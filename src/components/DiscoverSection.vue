@@ -131,6 +131,8 @@ const headerTitle = computed(() => {
       >
         <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
+          id="discover-search-input"
+          name="discoverSearch"
           :value="searchQuery"
           type="search"
           placeholder="Search songs, artists, synthwave..."
@@ -330,7 +332,7 @@ const headerTitle = computed(() => {
       <div
         v-for="track in tracks"
         :key="track.id"
-        class="group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
+        class="media-card-item group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
         :class="
           currentTrack?.id === track.id
             ? 'bg-indigo-50/90 border-indigo-200/90 shadow-md shadow-indigo-100/50 dark:bg-indigo-950/40 dark:border-indigo-500/40 dark:shadow-lg dark:shadow-indigo-950/20'
@@ -350,7 +352,7 @@ const headerTitle = computed(() => {
             />
             <div
               v-if="currentTrack?.id === track.id && isPlaying"
-              class="absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[1px]"
+              class="absolute inset-0 flex items-center justify-center bg-black/60"
             >
               <span
                 v-for="n in 3"

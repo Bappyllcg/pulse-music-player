@@ -551,6 +551,7 @@ export async function checkChannelHealth(
   try {
     const res = await fetch(sanitized, {
       method: 'GET',
+      headers: { Range: 'bytes=0-0' },
       signal: controller.signal,
     })
 
@@ -591,7 +592,7 @@ let latestTvRequestId = 0
  */
 export async function runBackgroundHealthCheck(
   targetChannels: TvChannel[],
-  concurrency = 12,
+  concurrency = 6,
 ): Promise<void> {
   if (!targetChannels || targetChannels.length === 0) return
 

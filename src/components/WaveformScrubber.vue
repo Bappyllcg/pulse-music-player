@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-const props = defineProps<{
-  trackId: string
-  currentTime: number
-  duration: number
-  disabled?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    trackId: string
+    currentTime: number
+    duration: number
+    disabled?: boolean
+    active?: boolean
+  }>(),
+  {
+    disabled: false,
+    active: true,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'seek', time: number): void
@@ -40,7 +47,7 @@ const containerRef = ref<HTMLElement | null>(null)
 
 const progressPercent = computed(() => {
   if (isDragging.value) return dragPercent.value
-  if (!props.duration || props.duration <= 0) return 0
+  if (!props.active || !props.duration || props.duration <= 0) return 0
   return Math.min(100, Math.max(0, (props.currentTime / props.duration) * 100))
 })
 
@@ -53,6 +60,7 @@ function formatTime(seconds: number): string {
 }
 
 const displayTime = computed(() => {
+  if (!props.active) return 0
   if (isDragging.value && props.duration > 0) {
     return (dragPercent.value / 100) * props.duration
   }
@@ -128,7 +136,7 @@ function handleKeySeek(target: number): void {
       <div
         v-for="(barHeight, idx) in bars"
         :key="idx"
-        class="relative flex-1 rounded-full transition-all duration-75"
+        class="relative flex-1 rounded-full transition-colors duration-75"
         :style="{ height: `${barHeight}%` }"
         :class="
           (idx / BAR_COUNT) * 100 <= progressPercent

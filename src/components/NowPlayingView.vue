@@ -53,36 +53,63 @@ const emit = defineEmits<{
   (e: 'setVolume', val: number): void
 }>()
 
-/* Swipe-to-dismiss gesture for iOS bottom sheet feel */
-const dragOffsetY = ref(0)
-const isDraggingView = ref(false)
+/* Swipe-to-dismiss gesture for iOS bottom sheet feel (RAF-decoupled for 120fps ProMotion) */
+const rootRef = ref<HTMLElement | null>(null)
+let isDraggingView = false
 let touchStartY = 0
+let currentTouchY = 0
+let rAFId: number | null = null
 let lastNonZeroVolume = 1
+
+function applySheetTransform(): void {
+  if (!rootRef.value) return
+  const deltaY = Math.max(0, currentTouchY - touchStartY)
+  if (deltaY > 0) {
+    rootRef.value.style.transform = `translate3d(0, ${deltaY}px, 0)`
+    rootRef.value.style.opacity = `${Math.max(0.6, 1 - deltaY / 320)}`
+    rootRef.value.style.transition = 'none'
+  } else {
+    rootRef.value.style.transform = ''
+    rootRef.value.style.opacity = ''
+  }
+  rAFId = null
+}
 
 function onTouchStart(e: TouchEvent): void {
   const target = e.target as HTMLElement | null
   if (target && target.closest('[role="slider"], input[type="range"]')) {
-    isDraggingView.value = false
+    isDraggingView = false
     return
   }
   touchStartY = e.touches[0].clientY
-  isDraggingView.value = true
+  currentTouchY = touchStartY
+  isDraggingView = true
 }
 
 function onTouchMove(e: TouchEvent): void {
-  if (!isDraggingView.value) return
-  const deltaY = e.touches[0].clientY - touchStartY
-  // Only allow downward dragging
-  dragOffsetY.value = deltaY > 0 ? deltaY : 0
+  if (!isDraggingView) return
+  currentTouchY = e.touches[0].clientY
+  if (rAFId === null) {
+    rAFId = requestAnimationFrame(applySheetTransform)
+  }
 }
 
 function onTouchEnd(): void {
-  if (!isDraggingView.value) return
-  isDraggingView.value = false
-  if (dragOffsetY.value > 90) {
+  if (!isDraggingView) return
+  isDraggingView = false
+  if (rAFId !== null) {
+    cancelAnimationFrame(rAFId)
+    rAFId = null
+  }
+  const deltaY = currentTouchY - touchStartY
+  if (rootRef.value) {
+    rootRef.value.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out'
+    rootRef.value.style.transform = ''
+    rootRef.value.style.opacity = ''
+  }
+  if (deltaY > 90) {
     emit('back')
   }
-  dragOffsetY.value = 0
 }
 
 const currentSourceLabel = computed(() => {
@@ -113,37 +140,37 @@ function onVolumeChange(val: number): void {
 
 <template>
   <div
+    ref="rootRef"
     class="now-playing-view relative flex h-full flex-col justify-between overflow-hidden px-6 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] select-none transition-transform duration-200 ease-out
-           bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100"
-    :style="dragOffsetY > 0 ? { transform: `translateY(${dragOffsetY}px)`, opacity: Math.max(0.6, 1 - dragOffsetY / 300) } : {}"
-    @touchstart="onTouchStart"
-    @touchmove="onTouchMove"
+           bg-slate-50 dark:bg-[#08080c] text-slate-900 dark:text-zinc-100 will-change-transform"
+    @touchstart.passive="onTouchStart"
+    @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
   >
-    <!-- Background Ambient Lighting / Mesh Aura that breathes with playback -->
+    <!-- Background Ambient Lighting / Mesh Aura that breathes with playback (Optimized GPU radial gradient) -->
     <div
       v-if="currentTrack"
       class="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
     >
       <div
-        class="absolute -top-1/4 -left-1/4 h-[90vw] w-[90vw] rounded-full blur-[110px] transition-all duration-1000"
+        class="absolute -top-1/4 -left-1/4 h-[90vw] w-[90vw] rounded-full blur-3xl transition-transform duration-1000 ease-out will-change-transform"
         :class="
           currentTrack.id.startsWith('radio') || currentTrack.duration <= 0
-            ? 'bg-rose-500/15 dark:bg-rose-600/25'
+            ? 'bg-rose-500/20 dark:bg-rose-600/30'
             : currentTrack.id.startsWith('jamendo')
-              ? 'bg-purple-500/15 dark:bg-purple-600/25'
-              : 'bg-indigo-500/15 dark:bg-indigo-600/25'
+              ? 'bg-purple-500/20 dark:bg-purple-600/30'
+              : 'bg-indigo-500/20 dark:bg-indigo-600/30'
         "
-        :style="{ transform: isPlaying ? 'scale(1.15)' : 'scale(0.9)' }"
+        :style="{ transform: isPlaying ? 'scale(1.15) translate3d(0,0,0)' : 'scale(0.9) translate3d(0,0,0)' }"
       ></div>
       <div
-        class="absolute -bottom-1/4 -right-1/4 h-[80vw] w-[80vw] rounded-full blur-[100px] transition-all duration-1000"
+        class="absolute -bottom-1/4 -right-1/4 h-[80vw] w-[80vw] rounded-full blur-3xl transition-transform duration-1000 ease-out will-change-transform"
         :class="
           currentTrack.id.startsWith('radio') || currentTrack.duration <= 0
-            ? 'bg-amber-500/10 dark:bg-amber-600/20'
-            : 'bg-blue-500/10 dark:bg-blue-600/20'
+            ? 'bg-amber-500/15 dark:bg-amber-600/20'
+            : 'bg-blue-500/15 dark:bg-blue-600/20'
         "
-        :style="{ transform: isPlaying ? 'scale(1.1)' : 'scale(0.85)' }"
+        :style="{ transform: isPlaying ? 'scale(1.1) translate3d(0,0,0)' : 'scale(0.85) translate3d(0,0,0)' }"
       ></div>
     </div>
 
@@ -290,6 +317,7 @@ function onVolumeChange(val: number): void {
         :track-id="currentTrack?.id ?? 'none'"
         :current-time="currentTime"
         :duration="duration"
+        :active="activeTab === 'player'"
         :disabled="!currentTrack || duration <= 0"
         @seek="emit('seek', $event)"
       />
@@ -310,6 +338,8 @@ function onVolumeChange(val: number): void {
         </button>
 
         <input
+          id="player-volume-slider"
+          name="playerVolume"
           type="range"
           min="0"
           max="1"

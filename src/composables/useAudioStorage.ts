@@ -79,10 +79,18 @@ function transactionDone(tx: IDBTransaction): Promise<void> {
   })
 }
 
-async function putRecord(record: TrackRecord): Promise<void> {
+export async function putRecord(record: TrackRecord): Promise<void> {
+  return putRecords([record])
+}
+
+export async function putRecords(records: TrackRecord[]): Promise<void> {
+  if (records.length === 0) return
   const db = await openDatabase()
   const tx = db.transaction(STORE_NAME, 'readwrite')
-  tx.objectStore(STORE_NAME).put(record)
+  const store = tx.objectStore(STORE_NAME)
+  for (const record of records) {
+    store.put(record)
+  }
   await transactionDone(tx)
 }
 
@@ -375,6 +383,7 @@ export function useAudioStorage() {
   async function addFiles(files: FileList | File[]): Promise<ImportResult> {
     const result: ImportResult = { added: 0, skipped: [], duplicates: 0 }
     const added: PlayableTrack[] = []
+    const recordsToPut: TrackRecord[] = []
     isImporting.value = true
 
     try {
@@ -434,22 +443,26 @@ export function useAudioStorage() {
           createdAt: Date.now(),
         }
 
-        try {
-          await putRecord(record)
-        } catch (error) {
-          URL.revokeObjectURL(url)
-          const leakedCover = objectUrls.get(id + '_cover')
-          if (leakedCover) {
-            URL.revokeObjectURL(leakedCover)
-            objectUrls.delete(id + '_cover')
-          }
-          throw error
-        }
-
+        recordsToPut.push(record)
         objectUrls.set(id, url)
         const { blob: _blob, coverBlob: _cBlob, ...rest } = record
         added.push({ ...rest, coverUrl, src: url, kind: 'local' })
         result.added += 1
+      }
+
+      if (recordsToPut.length > 0) {
+        try {
+          await putRecords(recordsToPut)
+        } catch (error) {
+          // Cleanup created object URLs on transaction failure
+          for (const r of recordsToPut) {
+            const u = objectUrls.get(r.id)
+            if (u) { URL.revokeObjectURL(u); objectUrls.delete(r.id) }
+            const cu = objectUrls.get(r.id + '_cover')
+            if (cu) { URL.revokeObjectURL(cu); objectUrls.delete(r.id + '_cover') }
+          }
+          throw error
+        }
       }
     } finally {
       if (added.length > 0) {

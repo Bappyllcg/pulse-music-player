@@ -157,6 +157,8 @@ function toggleCountryGrid() {
       >
         <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
+          id="radio-search-input"
+          name="radioSearch"
           :value="searchQuery"
           type="search"
           placeholder="Search radio stations, genres, or cities..."
@@ -272,6 +274,8 @@ function toggleCountryGrid() {
         >
           <Search :size="13" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-500" />
           <input
+            id="radio-country-search"
+            name="radioCountrySearch"
             v-model="countrySearchQuery"
             type="text"
             placeholder="Search countries..."
@@ -426,7 +430,7 @@ function toggleCountryGrid() {
       <div
         v-for="station in stations"
         :key="station.id"
-        class="group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
+        class="media-card-item group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
         :class="
           currentTrack?.id === station.id
             ? 'bg-rose-50/90 border-rose-200/90 shadow-md shadow-rose-100/50 dark:bg-rose-950/40 dark:border-rose-500/40 dark:shadow-lg dark:shadow-rose-950/20'
@@ -455,7 +459,7 @@ function toggleCountryGrid() {
 
             <div
               v-if="currentTrack?.id === station.id && isPlaying"
-              class="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-[1px]"
+              class="absolute inset-0 flex items-center justify-center bg-black/60"
             >
               <span
                 v-for="n in 3"

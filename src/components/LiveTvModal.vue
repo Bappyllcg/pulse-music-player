@@ -169,7 +169,10 @@ function cleanUpHls(): void {
   if (idleTimeout) window.clearTimeout(idleTimeout)
   if (zapBannerTimer) window.clearTimeout(zapBannerTimer)
   if (centerActionTimer) window.clearTimeout(centerActionTimer)
-  if (statsInterval) window.clearInterval(statsInterval)
+  if (statsInterval) {
+    window.clearInterval(statsInterval)
+    statsInterval = undefined
+  }
   lastTotalFrames = 0
 
   const video = videoRef.value
@@ -352,9 +355,10 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
       liveMaxLatencyDurationCount: 6,
       // Progressive playback start
       progressive: true,
-      // Buffer optimization
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
+      // Buffer optimization tuned for mobile RAM and live latency
+      maxBufferLength: 12,
+      maxMaxBufferLength: 20,
+      backBufferLength: 6,
       startFragPrefetch: true,
       // ABR & Screen Resolution Fitting
       capLevelToPlayerSize: true,
@@ -446,9 +450,24 @@ async function loadChannelStream(channel: TvChannel): Promise<void> {
     isBuffering.value = false
   }
 
-  // Poll stream diagnostics HUD every second
-  statsInterval = window.setInterval(updateStats, 1000)
+  // Poll stream diagnostics HUD only when HUD is actively open
+  if (showStatsHud.value) {
+    updateStats()
+    statsInterval = window.setInterval(updateStats, 1000)
+  }
 }
+
+watch(showStatsHud, (open) => {
+  if (open) {
+    updateStats()
+    if (!statsInterval) {
+      statsInterval = window.setInterval(updateStats, 1000)
+    }
+  } else if (statsInterval) {
+    window.clearInterval(statsInterval)
+    statsInterval = undefined
+  }
+})
 
 function onVideoPlaying(): void {
   cancelAutoSkip()
@@ -1109,6 +1128,8 @@ onBeforeUnmount(() => {
                 <Volume2 v-else :size="16" />
               </button>
               <input
+                id="tv-volume-slider"
+                name="tvVolume"
                 type="range"
                 min="0"
                 max="1"

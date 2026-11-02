@@ -401,6 +401,7 @@ html.light .pulse-range {
 .tab-crossfade-enter-active,
 .tab-crossfade-leave-active {
   transition: opacity 0.18s ease-out, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
 }
 
 .tab-crossfade-enter-from {
@@ -417,6 +418,7 @@ html.light .pulse-range {
 .mini-player-float-enter-active,
 .mini-player-float-leave-active {
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out;
+  will-change: transform, opacity;
 }
 
 .mini-player-float-enter-from,
@@ -459,11 +461,12 @@ html.light .pulse-range {
   opacity: 0;
 }
 
-/* FLIP Media List Transitions */
+/* FLIP Media List Transitions (Strictly composite GPU properties) */
 .media-list-move,
 .media-list-enter-active,
 .media-list-leave-active {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out;
+  will-change: transform, opacity;
 }
 
 .media-list-enter-from {
@@ -474,6 +477,12 @@ html.light .pulse-range {
 .media-list-leave-to {
   opacity: 0;
   transform: scale(0.96);
+}
+
+/* Offscreen item layout optimization for long media lists */
+.media-card-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
 }
 
 /* Heart Micro-Interaction */

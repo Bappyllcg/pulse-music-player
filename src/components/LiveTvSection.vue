@@ -150,6 +150,8 @@ function toggleCountryGrid() {
       >
         <Search :size="14" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-400" />
         <input
+          id="tv-search-input"
+          name="tvSearch"
           :value="searchQuery"
           type="search"
           placeholder="Filter channels, categories, or HD/1080p..."
@@ -265,6 +267,8 @@ function toggleCountryGrid() {
         >
           <Search :size="13" class="shrink-0 pointer-events-none text-slate-400 dark:text-zinc-500" />
           <input
+            id="tv-country-search"
+            name="tvCountrySearch"
             v-model="countrySearchQuery"
             type="text"
             placeholder="Search countries..."
@@ -419,7 +423,7 @@ function toggleCountryGrid() {
       <div
         v-for="ch in channels"
         :key="ch.id"
-        class="group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
+        class="media-card-item group flex items-center justify-between rounded-2xl p-2.5 border transition-all duration-200 active:scale-[0.99] cursor-pointer"
         :class="
           activePlayingChannel?.id === ch.id
             ? 'bg-amber-50/90 border-amber-200/90 shadow-md shadow-amber-100/50 dark:bg-amber-950/40 dark:border-amber-500/40 dark:shadow-lg dark:shadow-amber-950/20'
