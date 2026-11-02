@@ -30,6 +30,8 @@ function getSystemPreference(): 'light' | 'dark' {
 function updateMetaTags(effective: 'light' | 'dark', mode: ThemeMode): void {
   if (typeof document === 'undefined') return
 
+  const themeHex = effective === 'light' ? '#f4f4f8' : '#08080c'
+
   // Update <meta name="color-scheme">
   let colorSchemeMeta = document.querySelector('meta[name="color-scheme"]')
   if (!colorSchemeMeta) {
@@ -39,10 +41,26 @@ function updateMetaTags(effective: 'light' | 'dark', mode: ThemeMode): void {
   }
   colorSchemeMeta.setAttribute('content', mode === 'system' ? 'light dark' : effective)
 
-  // Update <meta name="theme-color">
-  const themeColorMeta = document.querySelector('meta[name="theme-color"]')
-  if (themeColorMeta) {
-    themeColorMeta.setAttribute('content', effective === 'light' ? '#f4f4f5' : '#09090b')
+  // Update all <meta name="theme-color"> elements to keep Android status bar contrast in sync
+  const themeColorMetas = document.querySelectorAll('meta[name="theme-color"]')
+  if (themeColorMetas.length > 0) {
+    themeColorMetas.forEach((meta) => {
+      if (meta.hasAttribute('media')) {
+        meta.removeAttribute('media')
+      }
+      meta.setAttribute('content', themeHex)
+    })
+  } else {
+    const newMeta = document.createElement('meta')
+    newMeta.setAttribute('name', 'theme-color')
+    newMeta.setAttribute('content', themeHex)
+    document.head.appendChild(newMeta)
+  }
+
+  // Update <meta name="apple-mobile-web-app-status-bar-style"> for iOS Safari status bar icons
+  const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+  if (statusBarMeta) {
+    statusBarMeta.setAttribute('content', effective === 'light' ? 'default' : 'black-translucent')
   }
 }
 

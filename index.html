@@ -3,14 +3,12 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Pulse" />
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f4f8" />
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08080c" />
-  <meta name="theme-color" content="#08080c" />
+  <meta name="theme-color" content="#08080c" id="theme-color-meta" />
   <meta name="color-scheme" content="light dark" />
   <style>
     html,
@@ -26,17 +24,33 @@
     }
   </style>
   <script>
-    try {
-      var t = localStorage.getItem('pulse:theme') || 'system';
-      var isDark = t === 'dark' || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      if (!isDark) {
-        document.documentElement.classList.add('light');
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.classList.add('dark');
-        document.documentElement.setAttribute('data-theme', 'dark');
-      }
-    } catch (e) { }
+    (function () {
+      try {
+        var t = localStorage.getItem('pulse:theme') || 'system';
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var isDark = t === 'dark' || (t === 'system' && prefersDark);
+        var effective = isDark ? 'dark' : 'light';
+        var themeHex = isDark ? '#08080c' : '#f4f4f8';
+        var root = document.documentElement;
+
+        if (isDark) {
+          root.classList.add('dark');
+          root.classList.remove('light');
+          root.setAttribute('data-theme', 'dark');
+          root.style.colorScheme = 'dark';
+        } else {
+          root.classList.add('light');
+          root.classList.remove('dark');
+          root.setAttribute('data-theme', 'light');
+          root.style.colorScheme = 'light';
+        }
+
+        var meta = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute('content', themeHex);
+        }
+      } catch (e) { }
+    })();
   </script>
   <meta name="description" content="Pulse Player - an offline-first music player for your own audio files." />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
